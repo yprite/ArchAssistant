@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QGraphicsItem
 
 from ui.colors import EDGE_COLOR, EDGE_HIGHLIGHT, FLOW_ACTIVE, FLOW_DIM, FLOW_IN, FLOW_VISITED
@@ -18,9 +18,12 @@ class EdgeItem(QGraphicsItem):
         self._flow_highlight = False
         self._flow_visited = False
         self._flow_active = False
+        self._violation_level: str | None = None
         self._path = QPainterPath()
         self._arrow = QPolygonF()
         self._bounding = QRectF()
+        self._start = QPointF()
+        self._end = QPointF()
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
         self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
@@ -35,7 +38,19 @@ class EdgeItem(QGraphicsItem):
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # type: ignore[override]
         painter.setRenderHint(QPainter.Antialiasing, True)
-        pen = self._highlight_pen() if self._is_highlighted() else self._default_pen()
+        if self._violation_level:
+            pen = self._violation_pen()
+        else:
+            pen = self._highlight_pen() if self._is_highlighted() else self._default_pen()
+        if self._flow_highlight or self._flow_visited or self._flow_active:
+            gradient = QLinearGradient(self._start, self._end)
+            base = FLOW_ACTIVE if self._flow_active else (FLOW_VISITED if self._flow_visited else FLOW_IN)
+            start = QColor(base)
+            end = QColor(base)
+            end.setAlphaF(0.3)
+            gradient.setColorAt(0.0, start)
+            gradient.setColorAt(1.0, end)
+            pen.setBrush(gradient)
         painter.setPen(pen)
         painter.setBrush(self._arrow_brush())
         painter.drawPath(self._path)
@@ -47,6 +62,8 @@ class EdgeItem(QGraphicsItem):
             return
         source_center = self.source_item.sceneBoundingRect().center()
         target_center = self.target_item.sceneBoundingRect().center()
+        self._start = source_center
+        self._end = target_center
         path, arrow = self._build_path(source_center, target_center)
         self.prepareGeometryChange()
         self._path = path
@@ -70,6 +87,10 @@ class EdgeItem(QGraphicsItem):
         self._flow_active = active
         self.update()
 
+    def set_violation(self, level: str | None) -> None:
+        self._violation_level = level
+        self.update()
+
     def _default_pen(self) -> QPen:
         color = EDGE_COLOR
         color.setAlphaF(0.55)
@@ -81,6 +102,13 @@ class EdgeItem(QGraphicsItem):
         color = FLOW_ACTIVE if self._flow_active else FLOW_VISITED
         color.setAlphaF(0.9)
         pen = QPen(color, 2.2 if self._flow_active else 1.6)
+        pen.setCosmetic(True)
+        return pen
+
+    def _violation_pen(self) -> QPen:
+        color = QColor("#EF4444") if self._violation_level == "error" else QColor("#F59E0B")
+        color.setAlphaF(0.9)
+        pen = QPen(color, 2.2)
         pen.setCosmetic(True)
         return pen
 
@@ -98,6 +126,9 @@ class EdgeItem(QGraphicsItem):
 
     def path(self) -> QPainterPath:
         return QPainterPath(self._path)
+
+    def flow_states(self) -> tuple[bool, bool, bool]:
+        return self._flow_highlight, self._flow_visited, self._flow_active
 
     def _build_path(self, start: QPointF, end: QPointF) -> tuple[QPainterPath, QPolygonF]:
         path = QPainterPath(start)

@@ -17,7 +17,15 @@ def compute_flow_path(graph: Graph, start_id: str, max_depth: int = 12) -> FlowR
     paths = compute_flow_paths(graph, start_id, max_depth=max_depth)
     if not paths:
         return FlowResult(nodes=[], edges=[])
-    best_path = max(paths, key=lambda path: _score_path(path, components))
+    best_path: List[str] | None = None
+    best_score: tuple[int, int] | None = None
+    for path in paths:
+        score = _score_path(path, components)
+        if best_score is None or score > best_score:
+            best_score = score
+            best_path = path
+    if best_path is None:
+        return FlowResult(nodes=[], edges=[])
     edge_map = _edge_map(graph.dependencies)
     path_nodes: List[Component] = []
     path_edges: List[Dependency] = []
@@ -141,5 +149,3 @@ def _edge_for(
     edge_map: Dict[tuple[str, str], Dependency], source_id: str, target_id: str
 ) -> Dependency | None:
     return edge_map.get((source_id, target_id)) or edge_map.get((target_id, source_id))
-    has_outbound = any(layer in ("outbound_port", "outbound_adapter") for layer in layers)
-    return (1 if has_outbound else 0, len(path))

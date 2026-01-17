@@ -1,0 +1,1 @@
+"""Architecture rule analysis package."""

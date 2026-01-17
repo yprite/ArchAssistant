@@ -26,8 +26,10 @@ class ArchitectureScene(QGraphicsScene):
         self.component_edges_in: Dict[str, List[EdgeItem]] = {}
         self.component_edges_out: Dict[str, List[EdgeItem]] = {}
         self.edge_items: List[EdgeItem] = []
+        self.edge_lookup: Dict[tuple[str, str], EdgeItem] = {}
         self.active_component_id: str | None = None
         self.flow_active = False
+        self.flow_token_pos: QPointF | None = None
 
     def load_graph(self, graph: Graph) -> None:
         self.clear()
@@ -38,6 +40,7 @@ class ArchitectureScene(QGraphicsScene):
         self.component_edges_in.clear()
         self.component_edges_out.clear()
         self.edge_items.clear()
+        self.edge_lookup.clear()
         self.active_component_id = None
         self.flow_active = False
 
@@ -279,6 +282,7 @@ class ArchitectureScene(QGraphicsScene):
             self.component_edges_out.setdefault(dep.source_id, []).append(edge)
             self.component_edges_in.setdefault(dep.target_id, []).append(edge)
             self.edge_items.append(edge)
+            self.edge_lookup[(dep.source_id, dep.target_id)] = edge
 
     def _layout_nodes_by_layer(self, components: List[Component]) -> Dict[str, QPointF]:
         layers: Dict[str, List[Component]] = {}
@@ -415,6 +419,8 @@ class ArchitectureScene(QGraphicsScene):
         for component_id, item in self.component_items.items():
             in_flow = component_id in node_ids
             item.set_flow_state(in_flow, is_start=component_id == start_id)
+            item.set_flow_visited(False)
+            item.set_flow_active(False)
             item.setOpacity(1.0 if in_flow else 0.18)
         for edge in self.edge_items:
             in_flow = (
@@ -422,22 +428,97 @@ class ArchitectureScene(QGraphicsScene):
                 edge.target_item.component.id,
             ) in edge_ids
             edge.set_flow_state(in_flow)
-            edge.setOpacity(0.9 if in_flow else 0.15)
+            edge.set_flow_visited(False)
+            edge.set_flow_active(False)
+            edge.setOpacity(0.6 if in_flow else 0.15)
         for items in self.layer_backgrounds.values():
             for item in items:
                 item.setOpacity(0.2)
 
     def clear_flow(self) -> None:
         self.flow_active = False
+        self.flow_token_pos = None
         for item in self.component_items.values():
             item.set_flow_state(False, False)
+            item.set_flow_visited(False)
+            item.set_flow_active(False)
             item.setOpacity(1.0)
         for edge in self.edge_items:
             edge.set_flow_state(False)
+            edge.set_flow_visited(False)
+            edge.set_flow_active(False)
             edge.setOpacity(0.55)
         for items in self.layer_backgrounds.values():
             for item in items:
                 item.setOpacity(1.0)
+
+    def set_flow_token_position(self, pos: QPointF | None) -> None:
+        self.flow_token_pos = pos
+
+    def apply_rule_violations(self, violations) -> None:
+        for edge in self.edge_items:
+            edge.set_violation(None)
+        for item in self.component_items.values():
+            item.set_violation_active(False)
+        for violation in violations:
+            if not violation.target_component_id:
+                continue
+            key = (violation.source_component_id, violation.target_component_id)
+            edge = self.edge_lookup.get(key)
+            if not edge:
+                edge = self.edge_lookup.get((violation.target_component_id, violation.source_component_id))
+            if edge:
+                edge.set_violation(violation.severity)
+
+    def focus_on_violation(self, violation) -> None:
+        for item in self.component_items.values():
+            item.set_violation_active(False)
+        source = self.component_items.get(violation.source_component_id)
+        target = self.component_items.get(violation.target_component_id) if violation.target_component_id else None
+        if source:
+            source.set_violation_active(True)
+        if target:
+            target.set_violation_active(True)
+
+    def clear_smell_highlights(self) -> None:
+        for item in self.component_items.values():
+            item.set_smell_active(None)
+
+    def focus_on_smell(self, component_id: str, color) -> None:
+        self.clear_smell_highlights()
+        item = self.component_items.get(component_id)
+        if item:
+            item.set_smell_active(color)
+
+    def set_bc_filter(self, component_ids: set[str] | None) -> None:
+        if not component_ids:
+            for item in self.component_items.values():
+                item.setOpacity(1.0)
+            for edge in self.edge_items:
+                edge.setOpacity(0.55)
+            return
+        for component_id, item in self.component_items.items():
+            item.setOpacity(1.0 if component_id in component_ids else 0.12)
+        for edge in self.edge_items:
+            source_id = edge.source_item.component.id
+            target_id = edge.target_item.component.id
+            in_bc = source_id in component_ids and target_id in component_ids
+            edge.setOpacity(0.6 if in_bc else 0.08)
+
+    def set_component_focus(self, component_ids: set[str] | None) -> None:
+        if not component_ids:
+            for item in self.component_items.values():
+                item.setOpacity(1.0)
+            for edge in self.edge_items:
+                edge.setOpacity(0.55)
+            return
+        for component_id, item in self.component_items.items():
+            item.setOpacity(1.0 if component_id in component_ids else 0.12)
+        for edge in self.edge_items:
+            source_id = edge.source_item.component.id
+            target_id = edge.target_item.component.id
+            in_focus = source_id in component_ids or target_id in component_ids
+            edge.setOpacity(0.6 if in_focus else 0.08)
 
     def _place_on_side_arcs(
         self, components: List[Component], radius: float, sides: List[int]

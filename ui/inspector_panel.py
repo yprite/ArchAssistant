@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QSizePolicy,
+    QComboBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -36,13 +37,29 @@ class InspectorPanel(QWidget):
         self.flow_button = QPushButton("Show Flow from Here")
         self.animate_flow_button = QPushButton("Play Flow Animation")
         self.clear_flow_button = QPushButton("Clear Flow")
+        self.report_button = QPushButton("Generate Use Case Report")
         self.flow_title = QLabel("Flow")
         self.flow_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        self.flow_speed = QComboBox()
+        self.flow_speed.addItems(["0.5x", "1x", "1.5x", "2x"])
+        self.flow_speed.setCurrentText("1x")
         self.flow_list = QListWidget()
         self.flow_list.setFixedHeight(180)
         self.flow_list.setVisible(False)
         self.flow_title.setVisible(False)
         self.clear_flow_button.setVisible(False)
+        self.violations_title = QLabel("Violations")
+        self.violations_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        self.violations_list = QListWidget()
+        self.violations_list.setFixedHeight(140)
+        self.violations_title.setVisible(False)
+        self.violations_list.setVisible(False)
+        self.smells_title = QLabel("DDD Smells")
+        self.smells_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        self.smells_list = QListWidget()
+        self.smells_list.setFixedHeight(140)
+        self.smells_title.setVisible(False)
+        self.smells_list.setVisible(False)
         self.open_button.setEnabled(False)
 
         for widget in (self.annotations_text, self.imports_text):
@@ -75,9 +92,16 @@ class InspectorPanel(QWidget):
         layout.addWidget(self.open_button)
         layout.addWidget(self.flow_button)
         layout.addWidget(self.animate_flow_button)
+        layout.addWidget(QLabel("Flow Speed"))
+        layout.addWidget(self.flow_speed)
         layout.addWidget(self.clear_flow_button)
+        layout.addWidget(self.report_button)
         layout.addWidget(self.flow_title)
         layout.addWidget(self.flow_list)
+        layout.addWidget(self.violations_title)
+        layout.addWidget(self.violations_list)
+        layout.addWidget(self.smells_title)
+        layout.addWidget(self.smells_list)
         self.setLayout(layout)
         self.setStyleSheet(
             "QLabel { font-size: 13px; color: #333333; }"
@@ -116,6 +140,9 @@ class InspectorPanel(QWidget):
             self.open_button.setEnabled(False)
             self.flow_button.setEnabled(False)
             self.animate_flow_button.setEnabled(False)
+            self.report_button.setEnabled(False)
+            self.clear_component_violations()
+            self.clear_component_smells()
             self._current_path = None
             return
 
@@ -148,6 +175,20 @@ class InspectorPanel(QWidget):
         if not has_items:
             self.flow_list.addItem(QListWidgetItem("No flow"))
 
+    def show_flow_steps(self, steps: list[str]) -> None:
+        self.flow_list.clear()
+        for idx, label in enumerate(steps, start=1):
+            self.flow_list.addItem(QListWidgetItem(f"{idx}. {label}"))
+        self.flow_title.setVisible(True)
+        self.flow_list.setVisible(True)
+        self.clear_flow_button.setVisible(True)
+
+    def set_active_flow_step(self, index: int) -> None:
+        if index < 0 or index >= self.flow_list.count():
+            return
+        self.flow_list.setCurrentRow(index)
+        self.flow_list.scrollToItem(self.flow_list.currentItem())
+
     def clear_flow(self) -> None:
         self.flow_list.clear()
         self.flow_list.setVisible(False)
@@ -156,6 +197,34 @@ class InspectorPanel(QWidget):
 
     def current_component(self) -> Component | None:
         return self._current_component
+
+    def show_component_violations(self, items: list[str]) -> None:
+        self.violations_list.clear()
+        for item in items:
+            self.violations_list.addItem(QListWidgetItem(item))
+        self.violations_title.setVisible(True)
+        self.violations_list.setVisible(True)
+        if not items:
+            self.violations_list.addItem(QListWidgetItem("No violations"))
+
+    def clear_component_violations(self) -> None:
+        self.violations_list.clear()
+        self.violations_list.setVisible(False)
+        self.violations_title.setVisible(False)
+
+    def show_component_smells(self, items: list[str]) -> None:
+        self.smells_list.clear()
+        for item in items:
+            self.smells_list.addItem(QListWidgetItem(item))
+        self.smells_title.setVisible(True)
+        self.smells_list.setVisible(True)
+        if not items:
+            self.smells_list.addItem(QListWidgetItem("No smells detected"))
+
+    def clear_component_smells(self) -> None:
+        self.smells_list.clear()
+        self.smells_list.setVisible(False)
+        self.smells_title.setVisible(False)
 
     def _open_path(self) -> None:
         if not self._current_path:

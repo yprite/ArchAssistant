@@ -45,6 +45,8 @@ class MinimapView(QGraphicsView):
 
         self._viewport_rect: QGraphicsRectItem | None = None
         self._static_built = False
+        self._edge_overlay: dict[tuple[str, str], QGraphicsLineItem] = {}
+        self._token_item: QGraphicsEllipseItem | None = None
 
         self._dragging = False
         self._drag_offset = QPointF(0, 0)
@@ -98,6 +100,11 @@ class MinimapView(QGraphicsView):
         self._draw_layers()
         self._draw_edges()
         self._draw_nodes()
+        self._token_item = QGraphicsEllipseItem(0, 0, 4, 4)
+        self._token_item.setBrush(QColor("#3B82F6"))
+        self._token_item.setPen(Qt.PenStyle.NoPen)
+        self._token_item.setZValue(5)
+        self._scene.addItem(self._token_item)
         self._static_built = True
         self._update_viewport_rect()
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
@@ -171,6 +178,7 @@ class MinimapView(QGraphicsView):
         color = QColor(EDGE_COLOR)
         color.setAlphaF(0.35)
         pen.setColor(color)
+        self._edge_overlay.clear()
         for edge in self._main_scene.edge_items:
             if not hasattr(edge, "source_item") or not hasattr(edge, "target_item"):
                 continue
@@ -182,11 +190,45 @@ class MinimapView(QGraphicsView):
             line.setPen(pen)
             line.setZValue(-20)
             self._scene.addItem(line)
+            key = (edge.source_item.component.id, edge.target_item.component.id)
+            self._edge_overlay[key] = line
 
     def _update_viewport_rect(self) -> None:
         viewport_rect = self._main_view.mapToScene(self._main_view.viewport().geometry()).boundingRect()
         if self._viewport_rect:
             self._viewport_rect.setRect(viewport_rect)
+        self._update_flow_overlay()
+
+    def _update_flow_overlay(self) -> None:
+        for edge in self._main_scene.edge_items:
+            key = (edge.source_item.component.id, edge.target_item.component.id)
+            line = self._edge_overlay.get(key)
+            if not line:
+                continue
+            in_flow, visited, active = edge.flow_states()
+            pen = line.pen()
+            if active:
+                pen.setColor(QColor("#3B82F6"))
+                pen.setWidthF(1.4)
+            elif visited:
+                pen.setColor(QColor("#60A5FA"))
+                pen.setWidthF(1.0)
+            elif in_flow:
+                pen.setColor(QColor("#93C5FD"))
+                pen.setWidthF(0.8)
+            else:
+                pen.setColor(QColor("#CBD5E1"))
+                pen.setWidthF(0.6)
+            line.setPen(pen)
+
+        token_pos = self._main_scene.flow_token_pos
+        if not self._token_item:
+            return
+        if token_pos is None:
+            self._token_item.setVisible(False)
+        else:
+            self._token_item.setVisible(True)
+            self._token_item.setPos(token_pos.x() - 2, token_pos.y() - 2)
 
     def _center_main_view(self, scene_pos: QPointF) -> None:
         self._main_view.centerOn(scene_pos)

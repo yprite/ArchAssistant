@@ -13,3 +13,9 @@ FLOW_ACTIVE = QColor("#3B82F6")
 FLOW_VISITED = QColor("#60A5FA")
 FLOW_IN = QColor("#93C5FD")
 FLOW_DIM = QColor("#CBD5E1")
+SMELL_COLORS = {
+    "anemic_domain": QColor("#F97316"),
+    "god_service": QColor("#EF4444"),
+    "repository_leak": QColor("#2563EB"),
+    "cross_aggregate_coupling": QColor("#8B5CF6"),
+}

@@ -35,6 +35,8 @@ class ComponentItem(QGraphicsObject):
         self._flow_active = False
         self._flow_start = False
         self._anim_active = False
+        self._violation_active = False
+        self._smell_color: QColor | None = None
         self._flash_animation: QPropertyAnimation | None = None
         self.setToolTip(self._build_tooltip())
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemIsSelectable, True)
@@ -55,7 +57,13 @@ class ComponentItem(QGraphicsObject):
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # type: ignore[override]
         painter.setRenderHint(QPainter.Antialiasing, True)
-        pen = QPen(self._stroke_color, self._current_stroke_width())
+        if self._smell_color:
+            pen_color = self._smell_color
+        elif self._violation_active:
+            pen_color = QColor("#EF4444")
+        else:
+            pen_color = self._stroke_color
+        pen = QPen(pen_color, self._current_stroke_width())
         pen.setCosmetic(True)
         painter.setPen(pen)
         painter.setBrush(self._fill_color)
@@ -120,15 +128,37 @@ class ComponentItem(QGraphicsObject):
         if active:
             self._fill_color = QColor(FLOW_ACTIVE)
             self._fill_color.setAlphaF(0.95)
+            glow = QColor(FLOW_ACTIVE)
+            glow.setAlphaF(0.7)
+            self._shadow.setBlurRadius(18)
+            self._shadow.setColor(glow)
+            self.setScale(1.06)
         elif self._flow_visited:
             self._fill_color = QColor(FLOW_VISITED)
             self._fill_color.setAlphaF(0.85)
+            self._shadow.setBlurRadius(10)
+            self._shadow.setColor(QColor(0, 0, 0, 15))
+            self.setScale(1.0)
         elif self._in_flow:
             self._fill_color = QColor(FLOW_IN)
             self._fill_color.setAlphaF(0.7)
+            self._shadow.setBlurRadius(8)
+            self._shadow.setColor(QColor(0, 0, 0, 10))
+            self.setScale(1.0)
         else:
             self._fill_color = QColor(self.color).darker(110)
             self._fill_color.setAlphaF(0.26)
+            self._shadow.setBlurRadius(8)
+            self._shadow.setColor(QColor(0, 0, 0, 15))
+            self.setScale(1.0)
+        self.update()
+
+    def set_violation_active(self, active: bool) -> None:
+        self._violation_active = active
+        self.update()
+
+    def set_smell_active(self, color: QColor | None) -> None:
+        self._smell_color = color
         self.update()
 
     def set_animation_active(self, active: bool) -> None:

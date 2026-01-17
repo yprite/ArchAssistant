@@ -58,6 +58,13 @@ class ArchitectureView(QGraphicsView):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.itemAt(event.position().toPoint()) is None:
+                self._panning = True
+                self._last_pan_point = event.position()
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
@@ -222,13 +229,17 @@ class ArchitectureView(QGraphicsView):
         self._minimap = minimap
         self._minimap.position_in_view()
 
+    def set_overlays_visible(self, visible: bool) -> None:
+        self._zoom_controls.setVisible(visible)
+        self._flow_controls.setVisible(visible)
+
     def centerOn(self, *args) -> None:  # type: ignore[override]
         super().centerOn(*args)
         self.viewport_changed.emit()
 
     def _init_flow_controls(self) -> None:
         self._flow_controls = QWidget(self.viewport())
-        self._flow_controls.setFixedSize(120, 32)
+        self._flow_controls.setFixedSize(156, 32)
         layout = QHBoxLayout(self._flow_controls)
         layout.setContentsMargins(6, 4, 6, 4)
         layout.setSpacing(6)
@@ -236,12 +247,15 @@ class ArchitectureView(QGraphicsView):
         self._flow_play.setText("▶")
         self._flow_pause = QToolButton()
         self._flow_pause.setText("⏸")
+        self._flow_step = QToolButton()
+        self._flow_step.setText("⏭")
         self._flow_restart = QToolButton()
         self._flow_restart.setText("⟲")
-        for button in (self._flow_play, self._flow_pause, self._flow_restart):
+        for button in (self._flow_play, self._flow_pause, self._flow_step, self._flow_restart):
             button.setFixedSize(28, 24)
         layout.addWidget(self._flow_play)
         layout.addWidget(self._flow_pause)
+        layout.addWidget(self._flow_step)
         layout.addWidget(self._flow_restart)
         self._flow_controls.setStyleSheet(
             "QWidget { background: rgba(255, 255, 255, 0.75); border-radius: 8px; }"
@@ -250,9 +264,10 @@ class ArchitectureView(QGraphicsView):
         )
         self._position_flow_controls()
 
-    def set_flow_controls(self, play_cb, pause_cb, restart_cb) -> None:
+    def set_flow_controls(self, play_cb, pause_cb, step_cb, restart_cb) -> None:
         self._flow_play.clicked.connect(play_cb)
         self._flow_pause.clicked.connect(pause_cb)
+        self._flow_step.clicked.connect(step_cb)
         self._flow_restart.clicked.connect(restart_cb)
 
     def _position_flow_controls(self) -> None:

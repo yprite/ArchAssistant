@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from cli.commands import analyze_command, load_graph_command, open_ui
+from cli.commands import analyze_command, analyze_rules_command, load_graph_command, open_ui
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,6 +23,9 @@ def main(argv: list[str] | None = None) -> int:
     open_parser = subparsers.add_parser("open", help="Open a graph JSON in the viewer")
     open_parser.add_argument("graph_path", help="Path to architecture.json")
 
+    rules_parser = subparsers.add_parser("rules", help="Analyze architecture rules from JSON")
+    rules_parser.add_argument("graph_path", help="Path to architecture.json")
+
     args = parser.parse_args(argv)
     if args.command == "analyze":
         output_path, graph = analyze_command(
@@ -37,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
         graph_path = Path(args.graph_path).resolve()
         graph = load_graph_command(graph_path)
         return open_ui(graph, graph_path.parent)
+
+    if args.command == "rules":
+        return analyze_rules_command(Path(args.graph_path).resolve())
 
     parser.print_help()
     return 1
