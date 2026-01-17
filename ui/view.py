@@ -19,13 +19,14 @@ class ArchitectureView(QGraphicsView):
         self._last_pan_point: QPointF | None = None
         self._minimap = None
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.BoundingRectViewportUpdate)
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontSavePainterState, True)
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing, True)
+        self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self._init_zoom_controls()
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
@@ -51,26 +52,24 @@ class ArchitectureView(QGraphicsView):
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.RightButton or (
-            event.button() == Qt.MouseButton.LeftButton and self._space_pan
+            event.button() == Qt.MouseButton.LeftButton
+            and (event.modifiers() & Qt.KeyboardModifier.ShiftModifier or self._space_pan)
         ):
             self._panning = True
             self._last_pan_point = event.position()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
             event.accept()
             return
-        if event.button() == Qt.MouseButton.LeftButton:
-            if self.itemAt(event.position().toPoint()) is None:
-                self._panning = True
-                self._last_pan_point = event.position()
-                self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                event.accept()
-                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
         if self._panning and self._last_pan_point is not None:
             delta = event.position() - self._last_pan_point
-            self.translate(delta.x(), delta.y())
+            hbar = self.horizontalScrollBar()
+            vbar = self.verticalScrollBar()
+            hbar.setValue(hbar.value() - int(delta.x()))
+            vbar.setValue(vbar.value() - int(delta.y()))
             self._last_pan_point = event.position()
             self.viewport_changed.emit()
             event.accept()
@@ -84,6 +83,7 @@ class ArchitectureView(QGraphicsView):
         ):
             self._panning = False
             self._last_pan_point = None
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
             self.setCursor(
                 Qt.CursorShape.OpenHandCursor if self._space_pan else Qt.CursorShape.ArrowCursor
             )

@@ -129,6 +129,11 @@ class UseCaseReportPanel(QWidget):
             for suggestion in report.refactoring_suggestions:
                 self.refactor_list.addItem(QListWidgetItem(suggestion.title))
         self.markdown_text.setPlainText(_report_markdown(report))
+        if report.event_summary.readiness_score == 0 and not report.event_summary.main_suggestions:
+            self.event_text.setPlainText(
+                "Event-Driven Readiness 분석 결과가 없습니다.\n"
+                "Analyze → Event-Driven Readiness를 먼저 실행하세요."
+            )
 
     def _on_step_clicked(self, item: QListWidgetItem) -> None:
         row = self.steps_list.currentRow()

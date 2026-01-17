@@ -15,8 +15,8 @@ from analysis.migration_planner import MigrationItem, MigrationPlan
 
 
 class MigrationPlannerPanel(QWidget):
-    load_target_requested = Signal()
-    rebuild_requested = Signal()
+    override_target_requested = Signal()
+    refresh_requested = Signal()
     export_markdown_requested = Signal()
     export_csv_requested = Signal()
     export_plain_requested = Signal()
@@ -27,14 +27,15 @@ class MigrationPlannerPanel(QWidget):
         self._plan: MigrationPlan | None = None
 
         self.target_label = QLabel("Target: -")
-        self.load_button = QPushButton("Load Target...")
-        self.rebuild_button = QPushButton("Rebuild Plan")
+        self.load_button = QPushButton("Override Target...")
+        self.rebuild_button = QPushButton("Refresh Plan")
+        self.status_label = QLabel("-")
         self.export_md_button = QPushButton("Export Markdown")
         self.export_csv_button = QPushButton("Export CSV")
         self.export_plain_button = QPushButton("Export Plain")
 
-        self.load_button.clicked.connect(self.load_target_requested.emit)
-        self.rebuild_button.clicked.connect(self.rebuild_requested.emit)
+        self.load_button.clicked.connect(self.override_target_requested.emit)
+        self.rebuild_button.clicked.connect(self.refresh_requested.emit)
         self.export_md_button.clicked.connect(self.export_markdown_requested.emit)
         self.export_csv_button.clicked.connect(self.export_csv_requested.emit)
         self.export_plain_button.clicked.connect(self.export_plain_requested.emit)
@@ -64,6 +65,7 @@ class MigrationPlannerPanel(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         layout.addLayout(top_row)
+        layout.addWidget(self.status_label)
         layout.addLayout(export_row)
         layout.addWidget(self.tree)
         layout.addWidget(QLabel("Selected Item"))
@@ -98,6 +100,9 @@ class MigrationPlannerPanel(QWidget):
                 child.setData(0, 256, item)
                 phase_item.addChild(child)
             phase_item.setExpanded(True)
+
+    def set_status(self, text: str) -> None:
+        self.status_label.setText(text)
 
     def _on_item_selected(self) -> None:
         items = self.tree.selectedItems()

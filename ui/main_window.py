@@ -15,8 +15,11 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStackedWidget,
     QToolBar,
+    QVBoxLayout,
+    QScrollArea,
     QWidget,
 )
+import json
 
 from analyzer.pipeline import analyze_project
 from architecture.rules import run_rule_analysis
@@ -35,7 +38,7 @@ from core.graph_loader import load_graph
 from core.use_case_utils import is_use_case_entry
 from analysis.use_case_report import build_use_case_reports, UseCaseReportSet
 from ui.inspector_panel import InspectorPanel
-from ui.legend_panel import LegendPanel
+from ui.left_sidebar import LeftSidebar
 from ui.rules_panel import ArchitectureRulesPanel
 from ui.smells_panel import SmellsPanel, smell_color_key
 from ui.colors import SMELL_COLORS
@@ -56,6 +59,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("DDD Architecture Viewer")
         self.resize(1200, 800)
+        self.setDockOptions(
+            QMainWindow.DockOption.AllowTabbedDocks
+            | QMainWindow.DockOption.AllowNestedDocks
+            | QMainWindow.DockOption.AnimatedDocks
+            | QMainWindow.DockOption.ForceTabbedDocks
+        )
 
         self.project_root: Path | None = None
         self.scene = ArchitectureScene()
@@ -68,7 +77,14 @@ class MainWindow(QMainWindow):
         self.view.setRenderHint(QPainter.Antialiasing)
         self.view.setViewportUpdateMode(self.view.ViewportUpdateMode.BoundingRectViewportUpdate)
         self.view.setBackgroundBrush(QColor("#F5F5F7"))
-        self.setCentralWidget(self.view_stack)
+        self.view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.view_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._central_container = QWidget()
+        central_layout = QVBoxLayout(self._central_container)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(self.view_stack)
+        self.setCentralWidget(self._central_container)
         self.view.setFocus()
         self.view.set_zoom_reset_callback(self._zoom_to_fit)
         self.view.set_flow_controls(
@@ -93,6 +109,8 @@ class MainWindow(QMainWindow):
         self._readiness_dock: QDockWidget | None = None
         self._smells_dock: QDockWidget | None = None
         self._context_dock: QDockWidget | None = None
+        self._left_dock: QDockWidget | None = None
+        self._migration_dock: QDockWidget | None = None
         self._init_actions()
         self._init_docks()
         self._current_graph = None
@@ -159,27 +177,50 @@ class MainWindow(QMainWindow):
         self._init_menu()
 
     def _init_docks(self) -> None:
-        legend_panel = LegendPanel()
-        self.filter_boxes = legend_panel.filter_boxes
+        left_sidebar = LeftSidebar()
+        self.filter_boxes = left_sidebar.filter_boxes
         for box in self.filter_boxes.values():
             box.stateChanged.connect(self._update_layer_filters)
 
         filter_dock = QDockWidget("Legend & Filters", self)
-        filter_dock.setWidget(legend_panel)
+        filter_dock.setWidget(left_sidebar)
+        filter_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
+        filter_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        filter_dock.setMinimumWidth(220)
+        left_sidebar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.LeftDockWidgetArea, filter_dock)
+        self._left_dock = filter_dock
 
         inspector_dock = QDockWidget("Inspector", self)
-        inspector_dock.setWidget(self.inspector)
+        inspector_dock.setWidget(self._wrap_scroll(self.inspector))
+        inspector_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        inspector_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
         inspector_dock.setMinimumWidth(320)
-        inspector_dock.setMaximumWidth(320)
+        inspector_dock.setMaximumWidth(420)
         inspector_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.inspector.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, inspector_dock)
         self._inspector_dock = inspector_dock
 
         self.rules_panel = ArchitectureRulesPanel()
         self.rules_panel.violation_selected.connect(self._on_rule_violation_selected)
         rules_dock = QDockWidget("Architecture Rules", self)
-        rules_dock.setWidget(self.rules_panel)
+        rules_dock.setWidget(self._wrap_scroll(self.rules_panel))
+        rules_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        rules_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        rules_dock.setMinimumWidth(320)
+        rules_dock.setMaximumWidth(420)
+        rules_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.rules_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, rules_dock)
         self.tabifyDockWidget(inspector_dock, rules_dock)
         self._rules_dock = rules_dock
@@ -190,7 +231,16 @@ class MainWindow(QMainWindow):
         self.report_panel.export_requested.connect(self._export_use_case_report)
         self.report_panel.suggestion_selected.connect(self._on_report_suggestion_selected)
         report_dock = QDockWidget("Use Case Report", self)
-        report_dock.setWidget(self.report_panel)
+        report_dock.setWidget(self._wrap_scroll(self.report_panel))
+        report_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        report_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        report_dock.setMinimumWidth(320)
+        report_dock.setMaximumWidth(420)
+        report_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.report_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, report_dock)
         self.tabifyDockWidget(inspector_dock, report_dock)
         self._report_dock = report_dock
@@ -198,7 +248,16 @@ class MainWindow(QMainWindow):
         self.smells_panel = SmellsPanel()
         self.smells_panel.smell_selected.connect(self._on_smell_selected)
         smells_dock = QDockWidget("DDD Smells", self)
-        smells_dock.setWidget(self.smells_panel)
+        smells_dock.setWidget(self._wrap_scroll(self.smells_panel))
+        smells_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        smells_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        smells_dock.setMinimumWidth(320)
+        smells_dock.setMaximumWidth(420)
+        smells_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.smells_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, smells_dock)
         self.tabifyDockWidget(inspector_dock, smells_dock)
         self._smells_dock = smells_dock
@@ -206,14 +265,32 @@ class MainWindow(QMainWindow):
         self.readiness_panel = EventReadinessPanel()
         self.readiness_panel.use_case_selected.connect(self._on_readiness_use_case_selected)
         readiness_dock = QDockWidget("Event-Driven Readiness", self)
-        readiness_dock.setWidget(self.readiness_panel)
+        readiness_dock.setWidget(self._wrap_scroll(self.readiness_panel))
+        readiness_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        readiness_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        readiness_dock.setMinimumWidth(320)
+        readiness_dock.setMaximumWidth(420)
+        readiness_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.readiness_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, readiness_dock)
         self.tabifyDockWidget(inspector_dock, readiness_dock)
         self._readiness_dock = readiness_dock
 
         self.context_panel = ContextMapInfoPanel()
         context_dock = QDockWidget("Context Map Info", self)
-        context_dock.setWidget(self.context_panel)
+        context_dock.setWidget(self._wrap_scroll(self.context_panel))
+        context_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        context_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        context_dock.setMinimumWidth(320)
+        context_dock.setMaximumWidth(420)
+        context_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.context_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, context_dock)
         self.tabifyDockWidget(inspector_dock, context_dock)
         self._context_dock = context_dock
@@ -221,8 +298,8 @@ class MainWindow(QMainWindow):
         self.context_scene.bc_selected.connect(self._on_bc_selected)
 
         self.migration_panel = MigrationPlannerPanel()
-        self.migration_panel.load_target_requested.connect(self._load_target_spec)
-        self.migration_panel.rebuild_requested.connect(self._rebuild_migration_plan)
+        self.migration_panel.override_target_requested.connect(self._load_target_spec_override)
+        self.migration_panel.refresh_requested.connect(self._rebuild_migration_plan)
         self.migration_panel.export_markdown_requested.connect(
             self._export_migration_markdown
         )
@@ -230,10 +307,21 @@ class MainWindow(QMainWindow):
         self.migration_panel.export_plain_requested.connect(self._export_migration_plain)
         self.migration_panel.item_selected.connect(self._on_migration_item_selected)
         migration_dock = QDockWidget("Migration Planner", self)
-        migration_dock.setWidget(self.migration_panel)
+        migration_dock.setWidget(self._wrap_scroll(self.migration_panel))
+        migration_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        migration_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        migration_dock.setMinimumWidth(320)
+        migration_dock.setMaximumWidth(420)
+        migration_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.migration_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, migration_dock)
         self.tabifyDockWidget(inspector_dock, migration_dock)
         self._migration_dock = migration_dock
+
+        self._setup_default_layout()
 
     def _init_menu(self) -> None:
         analyze_menu = self.menuBar().addMenu("Analyze")
@@ -257,6 +345,9 @@ class MainWindow(QMainWindow):
         view_menu.addAction(hex_view_action)
         view_menu.addAction(context_map_action)
         view_menu.addAction(clear_bc_action)
+        reset_layout_action = QAction("Reset Layout", self)
+        reset_layout_action.triggered.connect(self._setup_default_layout)
+        view_menu.addAction(reset_layout_action)
 
         file_menu = self.menuBar().addMenu("File")
         export_md_action = QAction("Export Migration Plan (Markdown)...", self)
@@ -316,6 +407,8 @@ class MainWindow(QMainWindow):
         self._run_smell_analysis()
         self._run_bounded_context_analysis()
         self._build_use_case_reports()
+        self._auto_load_or_create_target_spec()
+        self._setup_default_layout()
 
     def _update_layer_filters(self) -> None:
         for layer, box in self.filter_boxes.items():
@@ -511,13 +604,16 @@ class MainWindow(QMainWindow):
             self._building_reports = False
 
     def _load_target_spec(self) -> None:
+        return
+
+    def _load_target_spec_override(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load Target Architecture", "", "JSON Files (*.json)"
+            self, "Override Target Architecture", "", "JSON Files (*.json)"
         )
         if not path:
             return
-        self._target_spec = load_target_architecture_spec(path)
-        self.migration_panel.set_target_name(self._target_spec.name)
+        self._load_target_spec_from_path(Path(path))
+        self._save_target_settings(Path(path))
         self._rebuild_migration_plan()
 
     def _rebuild_migration_plan(self) -> None:
@@ -547,6 +643,7 @@ class MainWindow(QMainWindow):
             current_project_name=str(self.project_root) if self.project_root else "Current",
         )
         self.migration_panel.set_plan(self._migration_plan)
+        self.migration_panel.set_status("Migration plan refreshed.")
 
     def _export_migration_markdown(self) -> None:
         if not self._migration_plan:
@@ -588,6 +685,122 @@ class MainWindow(QMainWindow):
             if self._report_dock:
                 self._report_dock.raise_()
 
+    def _auto_load_or_create_target_spec(self) -> None:
+        if not self.project_root or not self._current_graph:
+            return
+        settings_path = self._target_settings_path()
+        target_path = None
+        if settings_path.exists():
+            try:
+                data = json.loads(settings_path.read_text(encoding="utf-8"))
+                saved = data.get("last_target_json_path")
+                if saved and Path(saved).exists():
+                    target_path = Path(saved)
+            except json.JSONDecodeError:
+                target_path = None
+
+        if not target_path:
+            for candidate in [
+                self.project_root / "ddd_target.json",
+                self.project_root / ".ddd" / "target.json",
+                self.project_root / "migration" / "target_architecture.json",
+            ]:
+                if candidate.exists():
+                    target_path = candidate
+                    break
+
+        if target_path and target_path.exists():
+            self._load_target_spec_from_path(target_path)
+            self._save_target_settings(target_path)
+            self.migration_panel.set_status(
+                f"Target loaded from {target_path.name}"
+            )
+            self._rebuild_migration_plan()
+            return
+
+        target_path = self.project_root / "ddd_target.json"
+        self._generate_default_target_spec(target_path)
+        self._load_target_spec_from_path(target_path)
+        self._save_target_settings(target_path)
+        self.migration_panel.set_status(
+            "Target auto-generated from current analysis."
+        )
+        self._rebuild_migration_plan()
+
+    def _generate_default_target_spec(self, path: Path) -> None:
+        if not self._bc_analysis:
+            self._run_bounded_context_analysis()
+        if not self._use_case_reports:
+            self._build_use_case_reports()
+        if not self._bc_analysis or not self._use_case_reports:
+            return
+
+        bounded_contexts = []
+        for bc in self._bc_analysis.contexts.values():
+            prefix = bc.name or "unknown"
+            bounded_contexts.append(
+                {
+                    "id": bc.id,
+                    "name": prefix,
+                    "packagePatterns": [f"{prefix}.*"] if prefix else [],
+                    "expectedLayers": [
+                        "domain",
+                        "application",
+                        "inbound_port",
+                        "outbound_port",
+                        "inbound_adapter",
+                        "outbound_adapter",
+                    ],
+                    "notes": "Auto-generated from current analysis",
+                }
+            )
+
+        use_cases = []
+        for report in self._use_case_reports.reports.values():
+            use_cases.append(
+                {
+                    "id": report.use_case_id,
+                    "name": report.use_case_name,
+                    "boundedContextId": report.bc_summary.entry_bc_id,
+                    "expectedFlowLayers": [
+                        "inbound_adapter",
+                        "inbound_port",
+                        "application",
+                        "domain",
+                        "outbound_port",
+                        "outbound_adapter",
+                    ],
+                    "expectedEvents": [],
+                }
+            )
+
+        data = {
+            "name": "Auto Generated Target",
+            "boundedContexts": bounded_contexts,
+            "useCaseBlueprints": use_cases,
+            "moduleGuidelines": {
+                "allowRepositoryAnnotationsInDomain": False,
+                "allowDirectAdapterToDomain": False,
+            },
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def _load_target_spec_from_path(self, path: Path) -> None:
+        self._target_spec = load_target_architecture_spec(str(path))
+        self.migration_panel.set_target_name(f"{self._target_spec.name} ({path.name})")
+
+    def _target_settings_path(self) -> Path:
+        return (self.project_root / ".ddd" / "settings.json") if self.project_root else Path("settings.json")
+
+    def _save_target_settings(self, path: Path) -> None:
+        if not self.project_root:
+            return
+        settings_path = self._target_settings_path()
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings = {"last_target_json_path": str(path)}
+        settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+
     def _on_bc_selected(self, bc_id: str) -> None:
         if not self._bc_analysis:
             return
@@ -613,6 +826,40 @@ class MainWindow(QMainWindow):
         self.scene.set_bc_filter(None)
         self.context_scene.highlight_bc(None)
         self.context_panel.clear()
+
+    def _wrap_scroll(self, widget: QWidget) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(widget)
+        return scroll
+
+    def _setup_default_layout(self) -> None:
+        self.setDockNestingEnabled(True)
+        if self._left_dock:
+            self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._left_dock)
+            self._left_dock.show()
+        if self._inspector_dock:
+            self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._inspector_dock)
+            self._inspector_dock.show()
+
+        right_docks = [
+            self._rules_dock,
+            self._report_dock,
+            self._smells_dock,
+            self._readiness_dock,
+            self._context_dock,
+            self._migration_dock,
+        ]
+        for dock in right_docks:
+            if dock and self._inspector_dock:
+                self.tabifyDockWidget(self._inspector_dock, dock)
+
+        if self._left_dock and self._inspector_dock:
+            self.resizeDocks([self._left_dock], [260], Qt.Orientation.Horizontal)
+            self.resizeDocks([self._inspector_dock], [360], Qt.Orientation.Horizontal)
+        if self._inspector_dock:
+            self._inspector_dock.raise_()
 
     def _show_component_smells(self, component_id: str) -> None:
         smells = self._smells_by_component.get(component_id, [])

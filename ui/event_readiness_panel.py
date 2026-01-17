@@ -21,6 +21,11 @@ class EventReadinessPanel(QWidget):
         super().__init__()
         self._result: EventReadinessAnalysisResult | None = None
         self._row_to_use_case: list[str] = []
+        self.empty_label = QLabel(
+            "Event-Driven Readiness 분석이 아직 실행되지 않았습니다.\n"
+            "Analyze 메뉴에서 Event-Driven Readiness를 실행하세요."
+        )
+        self.empty_label.setWordWrap(True)
 
         self.score_label = QLabel("Project Readiness: -")
         self.summary_label = QLabel("Use Cases: - | High: - | Medium: - | Low: -")
@@ -41,6 +46,7 @@ class EventReadinessPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        layout.addWidget(self.empty_label)
         layout.addWidget(self.score_label)
         layout.addWidget(self.summary_label)
         layout.addWidget(QLabel("Use Cases"))
@@ -50,10 +56,12 @@ class EventReadinessPanel(QWidget):
         layout.addWidget(self.suggestions_list)
 
         self.setStyleSheet("QLabel { font-size: 12px; color: #333333; }")
+        self._set_empty_state(True)
 
     def show_results(self, result: EventReadinessAnalysisResult) -> None:
         self._result = result
         summary = result.project_summary
+        self._set_empty_state(summary.total_use_cases == 0)
         self.score_label.setText(f"Project Readiness: {summary.avg_score:.1f} / 100")
         self.summary_label.setText(
             f"Use Cases: {summary.total_use_cases} | High: {summary.high_candidate_count} | "
@@ -82,6 +90,10 @@ class EventReadinessPanel(QWidget):
         self.suggestions_list.clear()
         self.detail_label.setText("Select a use case to see suggestions.")
 
+    def show_empty_state(self, message: str) -> None:
+        self.empty_label.setText(message)
+        self._set_empty_state(True)
+
     def _on_selection_changed(self) -> None:
         if not self._result:
             return
@@ -109,3 +121,11 @@ class EventReadinessPanel(QWidget):
             self.suggestions_list.addItem(QListWidgetItem("No suggestions."))
 
         self.use_case_selected.emit(use_case_id)
+
+    def _set_empty_state(self, empty: bool) -> None:
+        self.empty_label.setVisible(empty)
+        self.score_label.setVisible(not empty)
+        self.summary_label.setVisible(not empty)
+        self.use_case_table.setVisible(not empty)
+        self.detail_label.setVisible(not empty)
+        self.suggestions_list.setVisible(not empty)
