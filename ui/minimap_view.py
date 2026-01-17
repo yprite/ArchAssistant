@@ -44,14 +44,21 @@ class MinimapView(QGraphicsView):
         self.setGraphicsEffect(shadow)
 
         self._viewport_rect: QGraphicsRectItem | None = None
+        self._static_built = False
 
         self._dragging = False
         self._drag_offset = QPointF(0, 0)
-        self._update_timer = QTimer(self)
-        self._update_timer.setSingleShot(True)
-        self._update_timer.setInterval(100)
-        self._update_timer.timeout.connect(self.refresh)
-        self.refresh()
+        self._full_refresh_timer = QTimer(self)
+        self._full_refresh_timer.setSingleShot(True)
+        self._full_refresh_timer.setInterval(120)
+        self._full_refresh_timer.timeout.connect(self.refresh_full)
+
+        self._viewport_timer = QTimer(self)
+        self._viewport_timer.setSingleShot(True)
+        self._viewport_timer.setInterval(60)
+        self._viewport_timer.timeout.connect(self._update_viewport_rect)
+
+        self.refresh_full()
 
     def position_in_view(self) -> None:
         margin = 16
@@ -63,10 +70,14 @@ class MinimapView(QGraphicsView):
         self.move(x, y)
 
     def schedule_refresh(self) -> None:
-        if not self._update_timer.isActive():
-            self._update_timer.start()
+        if not self._full_refresh_timer.isActive():
+            self._full_refresh_timer.start()
 
-    def refresh(self) -> None:
+    def schedule_viewport_update(self) -> None:
+        if not self._viewport_timer.isActive():
+            self._viewport_timer.start()
+
+    def refresh_full(self) -> None:
         self._scene.clear()
         self._viewport_rect = QGraphicsRectItem()
         self._viewport_rect.setZValue(10)
@@ -87,6 +98,7 @@ class MinimapView(QGraphicsView):
         self._draw_layers()
         self._draw_edges()
         self._draw_nodes()
+        self._static_built = True
         self._update_viewport_rect()
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 

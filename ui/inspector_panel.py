@@ -7,7 +7,10 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -30,11 +33,27 @@ class InspectorPanel(QWidget):
         self.annotations_text = QTextEdit()
         self.imports_text = QTextEdit()
         self.open_button = QPushButton("Open in File Explorer")
+        self.flow_button = QPushButton("Show Flow from Here")
+        self.animate_flow_button = QPushButton("Play Flow Animation")
+        self.clear_flow_button = QPushButton("Clear Flow")
+        self.flow_title = QLabel("Flow")
+        self.flow_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        self.flow_list = QListWidget()
+        self.flow_list.setFixedHeight(180)
+        self.flow_list.setVisible(False)
+        self.flow_title.setVisible(False)
+        self.clear_flow_button.setVisible(False)
         self.open_button.setEnabled(False)
 
         for widget in (self.annotations_text, self.imports_text):
             widget.setReadOnly(True)
             widget.setFixedHeight(120)
+            widget.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+            widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        for label in (self.name_label, self.layer_label, self.package_label, self.path_label):
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
         form_layout = QFormLayout()
         form_layout.setContentsMargins(0, 0, 0, 0)
@@ -54,6 +73,11 @@ class InspectorPanel(QWidget):
         layout.addWidget(title)
         layout.addLayout(form_layout)
         layout.addWidget(self.open_button)
+        layout.addWidget(self.flow_button)
+        layout.addWidget(self.animate_flow_button)
+        layout.addWidget(self.clear_flow_button)
+        layout.addWidget(self.flow_title)
+        layout.addWidget(self.flow_list)
         self.setLayout(layout)
         self.setStyleSheet(
             "QLabel { font-size: 13px; color: #333333; }"
@@ -66,6 +90,7 @@ class InspectorPanel(QWidget):
         self._current_path: Path | None = None
         self._base_path: Path | None = None
         self.open_button.clicked.connect(self._open_path)
+        self._current_component: Component | None = None
         self._layer_labels = {
             "domain": "Domain",
             "application": "Application",
@@ -80,6 +105,7 @@ class InspectorPanel(QWidget):
         self._base_path = base_path
 
     def show_component(self, component: Component | None) -> None:
+        self._current_component = component
         if component is None:
             self.name_label.setText("-")
             self.layer_label.setText("-")
@@ -88,6 +114,8 @@ class InspectorPanel(QWidget):
             self.annotations_text.setPlainText("")
             self.imports_text.setPlainText("")
             self.open_button.setEnabled(False)
+            self.flow_button.setEnabled(False)
+            self.animate_flow_button.setEnabled(False)
             self._current_path = None
             return
 
@@ -98,6 +126,8 @@ class InspectorPanel(QWidget):
         self.annotations_text.setPlainText("\n".join(component.annotations))
         self.imports_text.setPlainText("\n".join(component.imports[:30]))
         self.open_button.setEnabled(bool(component.path))
+        self.flow_button.setEnabled(True)
+        self.animate_flow_button.setEnabled(True)
         if component.path:
             path = Path(component.path)
             if self._base_path and not path.is_absolute():
@@ -105,6 +135,27 @@ class InspectorPanel(QWidget):
             self._current_path = path
         else:
             self._current_path = None
+
+    def show_flow(self, flow_items: list[tuple[str, str, str]]) -> None:
+        self.flow_list.clear()
+        for index, layer_label, name in flow_items:
+            item = QListWidgetItem(f"{index}. [{layer_label}] {name}")
+            self.flow_list.addItem(item)
+        has_items = bool(flow_items)
+        self.flow_title.setVisible(True)
+        self.flow_list.setVisible(True)
+        self.clear_flow_button.setVisible(True)
+        if not has_items:
+            self.flow_list.addItem(QListWidgetItem("No flow"))
+
+    def clear_flow(self) -> None:
+        self.flow_list.clear()
+        self.flow_list.setVisible(False)
+        self.flow_title.setVisible(False)
+        self.clear_flow_button.setVisible(False)
+
+    def current_component(self) -> Component | None:
+        return self._current_component
 
     def _open_path(self) -> None:
         if not self._current_path:

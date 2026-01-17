@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QGraphicsDropShadowEffect, QGraphicsObject
 
 from analyzer.model import Component
 from core.config import LAYER_COLORS, LayoutConfig
-from ui.colors import STROKE_COLOR, TEXT_PRIMARY
+from ui.colors import FLOW_ACTIVE, FLOW_DIM, FLOW_IN, FLOW_VISITED, STROKE_COLOR, TEXT_PRIMARY
 
 
 class ComponentItem(QGraphicsObject):
@@ -30,11 +30,18 @@ class ComponentItem(QGraphicsObject):
         self._stroke_color = QColor(self.color).darker(140)
         self._is_active = False
         self._is_hovered = False
+        self._in_flow = False
+        self._flow_visited = False
+        self._flow_active = False
+        self._flow_start = False
+        self._anim_active = False
         self._flash_animation: QPropertyAnimation | None = None
         self.setToolTip(self._build_tooltip())
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemSendsScenePositionChanges, True)
+        self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
         self.setAcceptHoverEvents(True)
+        self.setCacheMode(QGraphicsObject.CacheMode.DeviceCoordinateCache)
         self._shadow = QGraphicsDropShadowEffect()
         self._shadow.setBlurRadius(8)
         self._shadow.setOffset(0, 2)
@@ -53,9 +60,11 @@ class ComponentItem(QGraphicsObject):
         painter.setPen(pen)
         painter.setBrush(self._fill_color)
         painter.drawRoundedRect(self._pill_rect, self._pill_height / 2, self._pill_height / 2)
-        painter.setPen(QPen(TEXT_PRIMARY))
-        painter.setFont(self._label_font())
-        painter.drawText(self._pill_rect, Qt.AlignmentFlag.AlignCenter, self._display_text)
+        if painter.worldTransform().m11() > 0.35:
+            text_color = QColor("#FFFFFF") if (self._in_flow or self._flow_active) else TEXT_PRIMARY
+            painter.setPen(QPen(text_color))
+            painter.setFont(self._label_font())
+            painter.drawText(self._pill_rect, Qt.AlignmentFlag.AlignCenter, self._display_text)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         self.clicked.emit(self.component)
@@ -85,6 +94,56 @@ class ComponentItem(QGraphicsObject):
         self._is_active = active
         self.update()
 
+    def set_flow_state(self, in_flow: bool, is_start: bool = False) -> None:
+        self._in_flow = in_flow
+        self._flow_start = is_start
+        if in_flow:
+            self._fill_color = QColor(FLOW_IN)
+            self._fill_color.setAlphaF(0.7)
+        else:
+            self._fill_color = QColor(self.color).darker(110)
+            self._fill_color.setAlphaF(0.26)
+        self.update()
+
+    def set_flow_visited(self, visited: bool) -> None:
+        self._flow_visited = visited
+        if visited:
+            self._fill_color = QColor(FLOW_VISITED)
+            self._fill_color.setAlphaF(0.85)
+        elif self._in_flow:
+            self._fill_color = QColor(FLOW_IN)
+            self._fill_color.setAlphaF(0.7)
+        self.update()
+
+    def set_flow_active(self, active: bool) -> None:
+        self._flow_active = active
+        if active:
+            self._fill_color = QColor(FLOW_ACTIVE)
+            self._fill_color.setAlphaF(0.95)
+        elif self._flow_visited:
+            self._fill_color = QColor(FLOW_VISITED)
+            self._fill_color.setAlphaF(0.85)
+        elif self._in_flow:
+            self._fill_color = QColor(FLOW_IN)
+            self._fill_color.setAlphaF(0.7)
+        else:
+            self._fill_color = QColor(self.color).darker(110)
+            self._fill_color.setAlphaF(0.26)
+        self.update()
+
+    def set_animation_active(self, active: bool) -> None:
+        self._anim_active = active
+        if active:
+            self._fill_color = QColor(self.color).darker(150)
+            self._fill_color.setAlphaF(0.95)
+        elif self._in_flow:
+            self._fill_color = QColor(self.color).darker(140)
+            self._fill_color.setAlphaF(0.9)
+        else:
+            self._fill_color = QColor(self.color).darker(110)
+            self._fill_color.setAlphaF(0.26)
+        self.update()
+
     def flash(self, cycles: int = 3) -> None:
         if self._flash_animation:
             self._flash_animation.stop()
@@ -111,6 +170,12 @@ class ComponentItem(QGraphicsObject):
             return 1.4
         if self._is_hovered:
             return 1.2
+        if self._flow_active:
+            return 1.8
+        if self._flow_start:
+            return 1.6
+        if self._anim_active:
+            return 1.6
         return 1.0
 
     def _build_tooltip(self) -> str:

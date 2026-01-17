@@ -6,7 +6,7 @@ from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QGraphicsItem
 
-from ui.colors import EDGE_COLOR, EDGE_HIGHLIGHT
+from ui.colors import EDGE_COLOR, EDGE_HIGHLIGHT, FLOW_ACTIVE, FLOW_DIM, FLOW_IN, FLOW_VISITED
 
 
 class EdgeItem(QGraphicsItem):
@@ -14,10 +14,15 @@ class EdgeItem(QGraphicsItem):
         super().__init__()
         self.source_item = source_item
         self.target_item = target_item
-        self._highlighted = False
+        self._hover_highlight = False
+        self._flow_highlight = False
+        self._flow_visited = False
+        self._flow_active = False
         self._path = QPainterPath()
         self._arrow = QPolygonF()
         self._bounding = QRectF()
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
         if hasattr(source_item, "position_changed"):
             source_item.position_changed.connect(self.update_positions)
@@ -30,7 +35,7 @@ class EdgeItem(QGraphicsItem):
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # type: ignore[override]
         painter.setRenderHint(QPainter.Antialiasing, True)
-        pen = self._highlight_pen() if self._highlighted else self._default_pen()
+        pen = self._highlight_pen() if self._is_highlighted() else self._default_pen()
         painter.setPen(pen)
         painter.setBrush(self._arrow_brush())
         painter.drawPath(self._path)
@@ -50,7 +55,19 @@ class EdgeItem(QGraphicsItem):
         self.update()
 
     def set_highlighted(self, highlighted: bool) -> None:
-        self._highlighted = highlighted
+        self._hover_highlight = highlighted
+        self.update()
+
+    def set_flow_state(self, in_flow: bool) -> None:
+        self._flow_highlight = in_flow
+        self.update()
+
+    def set_flow_visited(self, visited: bool) -> None:
+        self._flow_visited = visited
+        self.update()
+
+    def set_flow_active(self, active: bool) -> None:
+        self._flow_active = active
         self.update()
 
     def _default_pen(self) -> QPen:
@@ -61,20 +78,26 @@ class EdgeItem(QGraphicsItem):
         return pen
 
     def _highlight_pen(self) -> QPen:
-        color = EDGE_HIGHLIGHT
+        color = FLOW_ACTIVE if self._flow_active else FLOW_VISITED
         color.setAlphaF(0.9)
-        pen = QPen(color, 1.6)
+        pen = QPen(color, 2.2 if self._flow_active else 1.6)
         pen.setCosmetic(True)
         return pen
 
     def _arrow_brush(self) -> QColor:
-        if self._highlighted:
-            color = QColor(EDGE_HIGHLIGHT)
+        if self._is_highlighted():
+            color = QColor(FLOW_ACTIVE if self._flow_active else FLOW_VISITED)
             color.setAlphaF(0.85)
             return color
         color = QColor(EDGE_COLOR)
-        color.setAlphaF(0.75)
+        color.setAlphaF(0.35 if self._flow_highlight else 0.2)
         return color
+
+    def _is_highlighted(self) -> bool:
+        return self._hover_highlight or self._flow_highlight or self._flow_visited or self._flow_active
+
+    def path(self) -> QPainterPath:
+        return QPainterPath(self._path)
 
     def _build_path(self, start: QPointF, end: QPointF) -> tuple[QPainterPath, QPolygonF]:
         path = QPainterPath(start)

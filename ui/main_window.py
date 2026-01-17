@@ -18,11 +18,13 @@ from PySide6.QtWidgets import (
 )
 
 from analyzer.pipeline import analyze_project
+from core.flow import compute_flow_path
 from core.graph_loader import load_graph
 from ui.inspector_panel import InspectorPanel
 from ui.legend_panel import LegendPanel
 from ui.minimap_view import MinimapView
 from ui.view import ArchitectureView
+from ui.flow_animation_controller import FlowAnimationController, FlowStep
 from ui.scene import ArchitectureScene
 
 
@@ -41,10 +43,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.view)
         self.view.setFocus()
         self.view.set_zoom_reset_callback(self._zoom_to_fit)
+        self.view.set_flow_controls(self._play_flow_animation, self._pause_flow_animation, self._restart_flow_animation)
         self.minimap = MinimapView(self.view, self.scene)
         self.minimap.setParent(self.view.viewport())
         self.view.set_minimap(self.minimap)
-        self.view.viewport_changed.connect(self.minimap.schedule_refresh)
+        self.view.viewport_changed.connect(self.minimap.schedule_viewport_update)
         self.scene.changed.connect(self.minimap.schedule_refresh)
 
         self.inspector = InspectorPanel()
@@ -53,6 +56,8 @@ class MainWindow(QMainWindow):
         self._last_hovered_id: str | None = None
         self._init_actions()
         self._init_docks()
+        self._current_graph = None
+        self._flow_animation: FlowAnimationController | None = None
 
     def _init_actions(self) -> None:
         toolbar = QToolBar("Main")
@@ -114,6 +119,7 @@ class MainWindow(QMainWindow):
         inspector_dock = QDockWidget("Inspector", self)
         inspector_dock.setWidget(self.inspector)
         inspector_dock.setMinimumWidth(320)
+        inspector_dock.setMaximumWidth(320)
         inspector_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, inspector_dock)
 
@@ -145,12 +151,17 @@ class MainWindow(QMainWindow):
 
     def _load_graph(self, graph) -> None:
         self.scene.load_graph(graph)
+        self._current_graph = graph
         for item in self.scene.component_items.values():
             item.clicked.connect(self._on_component_clicked)
             item.hovered.connect(self._on_component_hovered)
             item.double_clicked.connect(self._open_component_path)
         self._update_layer_filters()
         self._apply_layer_focus()
+        self.inspector.flow_button.clicked.connect(self._show_flow_from_inspector)
+        self.inspector.clear_flow_button.clicked.connect(self._clear_flow)
+        self.inspector.flow_list.itemClicked.connect(self._on_flow_item_clicked)
+        self.inspector.animate_flow_button.clicked.connect(self._play_flow_animation)
 
     def _update_layer_filters(self) -> None:
         for layer, box in self.filter_boxes.items():
@@ -213,6 +224,93 @@ class MainWindow(QMainWindow):
                 if active:
                     self.inspector.show_component(active.component)
 
+    def _show_flow_from_inspector(self) -> None:
+        component = self.inspector.current_component()
+        if not component or not self._current_graph:
+            return
+        flow = compute_flow_path(self._current_graph, component.id)
+        self.scene.apply_flow(flow, component.id)
+        self.inspector.show_flow(self._flow_list_items(flow))
+
+    def _clear_flow(self) -> None:
+        self.scene.clear_flow()
+        self.inspector.clear_flow()
+        if self._flow_animation:
+            self._flow_animation.stop()
+
+    def _flow_list_items(self, flow) -> list[tuple[str, str, str]]:
+        labels = {
+            "domain": "Domain",
+            "application": "App",
+            "inbound_port": "InPort",
+            "outbound_port": "OutPort",
+            "inbound_adapter": "InAdp",
+            "outbound_adapter": "OutAdp",
+            "unknown": "Unknown",
+        }
+        return [
+            (str(idx + 1), labels.get(node.layer, node.layer), node.name)
+            for idx, node in enumerate(flow.nodes)
+        ]
+
+    def _on_flow_item_clicked(self, item) -> None:
+        text = item.text()
+        if "." not in text:
+            return
+        name = text.split("]", 1)[-1].strip()
+        for component_id, comp_item in self.scene.component_items.items():
+            if comp_item.component.name == name:
+                self._focus_component(component_id)
+                break
+
+    def _play_flow_animation(self) -> None:
+        component = self.inspector.current_component()
+        if not component or not self._current_graph:
+            return
+        flow = compute_flow_path(self._current_graph, component.id)
+        if not flow.nodes:
+            return
+        self.scene.apply_flow(flow, component.id)
+        steps = self._build_flow_steps(flow)
+        if self._flow_animation:
+            self._flow_animation.stop()
+        self._flow_animation = FlowAnimationController(self.scene, steps)
+        self._flow_animation.play()
+
+    def _pause_flow_animation(self) -> None:
+        if self._flow_animation:
+            self._flow_animation.pause()
+
+    def _restart_flow_animation(self) -> None:
+        if self._flow_animation:
+            self._flow_animation.restart()
+
+    def _build_flow_steps(self, flow) -> list[FlowStep]:
+        steps: list[FlowStep] = []
+        node_items = {item.component.id: item for item in self.scene.component_items.values()}
+        edge_items = {}
+        for edge in self.scene.edge_items:
+            edge_items[(edge.source_item.component.id, edge.target_item.component.id)] = edge
+        base_duration = 400
+        for idx in range(len(flow.nodes) - 1):
+            source = flow.nodes[idx]
+            target = flow.nodes[idx + 1]
+            edge = edge_items.get((source.id, target.id)) or edge_items.get(
+                (target.id, source.id)
+            )
+            if not edge:
+                continue
+            steps.append(
+                FlowStep(
+                    index=idx,
+                    source_item=node_items[source.id],
+                    target_item=node_items[target.id],
+                    edge_item=edge,
+                    duration_ms=base_duration,
+                )
+            )
+        return steps
+
     def _set_focus_opacity(self, focus_layers: set[str]) -> None:
         dim_opacity = 0.2
         layers = [
@@ -261,7 +359,6 @@ class MainWindow(QMainWindow):
         item.flash(3)
         rect = item.sceneBoundingRect().adjusted(-160, -160, 160, 160)
         self.view.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
-        self.view.reset_zoom()
 
     def _apply_toolbar_styles(self, toolbar: QToolBar) -> None:
         toolbar.setStyleSheet(

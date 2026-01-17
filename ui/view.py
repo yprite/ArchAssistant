@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QGraphicsView, QHBoxLayout, QToolButton, QWidget
 
 
@@ -12,6 +13,7 @@ class ArchitectureView(QGraphicsView):
         self._min_zoom = 0.25
         self._max_zoom = 3.0
         self._zoom_factor = 1.12
+        self._zoom_accumulator = 0.0
         self._space_pan = False
         self._panning = False
         self._last_pan_point: QPointF | None = None
@@ -20,18 +22,31 @@ class ArchitectureView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.BoundingRectViewportUpdate)
+        self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontSavePainterState, True)
+        self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing, True)
         self._init_zoom_controls()
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
         if event.angleDelta().y() == 0:
             return
-        factor = self._zoom_factor if event.angleDelta().y() > 0 else 1 / self._zoom_factor
-        old_pos = self.mapToScene(event.position().toPoint())
-        self._apply_zoom(factor)
-        new_pos = self.mapToScene(event.position().toPoint())
-        delta = new_pos - old_pos
-        self.translate(delta.x(), delta.y())
-        self.viewport_changed.emit()
+        if abs(event.angleDelta().y()) < abs(event.angleDelta().x()):
+            event.ignore()
+            return
+
+        self._zoom_accumulator += event.angleDelta().y()
+        step = 120.0
+        anchor = event.position().toPoint()
+        changed = False
+        while self._zoom_accumulator >= step:
+            changed = self._apply_zoom_step(True, anchor) or changed
+            self._zoom_accumulator -= step
+        while self._zoom_accumulator <= -step:
+            changed = self._apply_zoom_step(False, anchor) or changed
+            self._zoom_accumulator += step
+        if changed:
+            self.viewport_changed.emit()
         event.accept()
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
@@ -112,12 +127,12 @@ class ArchitectureView(QGraphicsView):
         super().keyReleaseEvent(event)
 
     def zoom_in(self) -> None:
-        self._apply_zoom(self._zoom_factor)
-        self.viewport_changed.emit()
+        if self._apply_zoom_step(True, None):
+            self.viewport_changed.emit()
 
     def zoom_out(self) -> None:
-        self._apply_zoom(1 / self._zoom_factor)
-        self.viewport_changed.emit()
+        if self._apply_zoom_step(False, None):
+            self.viewport_changed.emit()
 
     def zoom_to_fit(self, rect) -> None:
         if rect.isNull():
@@ -134,13 +149,27 @@ class ArchitectureView(QGraphicsView):
             self.centerOn(padded.center())
         self.viewport_changed.emit()
 
-    def _apply_zoom(self, factor: float) -> None:
+    def _apply_zoom(self, factor: float) -> bool:
         current = self._current_scale()
         target = max(self._min_zoom, min(self._max_zoom, current * factor))
         if abs(target - current) < 1e-4:
-            return
+            return False
         actual = target / current
         self.scale(actual, actual)
+        return True
+
+    def _apply_zoom_step(self, zoom_in: bool, anchor_pos) -> bool:
+        factor = self._zoom_factor if zoom_in else 1 / self._zoom_factor
+        if anchor_pos is None:
+            return self._apply_zoom(factor)
+        old_pos = self.mapToScene(anchor_pos)
+        changed = self._apply_zoom(factor)
+        if not changed:
+            return False
+        new_pos = self.mapToScene(anchor_pos)
+        delta = new_pos - old_pos
+        self.translate(delta.x(), delta.y())
+        return True
 
     def _current_scale(self) -> float:
         return self.transform().m11()
@@ -170,6 +199,7 @@ class ArchitectureView(QGraphicsView):
             " border-radius: 6px; font-weight: 600; }"
         )
         self._position_zoom_controls()
+        self._init_flow_controls()
 
     def set_zoom_reset_callback(self, callback) -> None:
         self._zoom_reset.clicked.connect(callback)
@@ -177,6 +207,7 @@ class ArchitectureView(QGraphicsView):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._position_zoom_controls()
+        self._position_flow_controls()
         if self._minimap is not None:
             self._minimap.position_in_view()
         self.viewport_changed.emit()
@@ -194,3 +225,38 @@ class ArchitectureView(QGraphicsView):
     def centerOn(self, *args) -> None:  # type: ignore[override]
         super().centerOn(*args)
         self.viewport_changed.emit()
+
+    def _init_flow_controls(self) -> None:
+        self._flow_controls = QWidget(self.viewport())
+        self._flow_controls.setFixedSize(120, 32)
+        layout = QHBoxLayout(self._flow_controls)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(6)
+        self._flow_play = QToolButton()
+        self._flow_play.setText("▶")
+        self._flow_pause = QToolButton()
+        self._flow_pause.setText("⏸")
+        self._flow_restart = QToolButton()
+        self._flow_restart.setText("⟲")
+        for button in (self._flow_play, self._flow_pause, self._flow_restart):
+            button.setFixedSize(28, 24)
+        layout.addWidget(self._flow_play)
+        layout.addWidget(self._flow_pause)
+        layout.addWidget(self._flow_restart)
+        self._flow_controls.setStyleSheet(
+            "QWidget { background: rgba(255, 255, 255, 0.75); border-radius: 8px; }"
+            "QToolButton { background: transparent; border: 1px solid #D6D6D6;"
+            " border-radius: 6px; font-weight: 600; }"
+        )
+        self._position_flow_controls()
+
+    def set_flow_controls(self, play_cb, pause_cb, restart_cb) -> None:
+        self._flow_play.clicked.connect(play_cb)
+        self._flow_pause.clicked.connect(pause_cb)
+        self._flow_restart.clicked.connect(restart_cb)
+
+    def _position_flow_controls(self) -> None:
+        margin = 12
+        x = self.viewport().width() - self._flow_controls.width() - margin
+        y = self.viewport().height() - self._flow_controls.height() - margin
+        self._flow_controls.move(x, y)

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsPolygonItem, QGraphics
 
 from analyzer.model import Component, Dependency, Graph
 from core.config import LAYER_COLORS, LayoutConfig
+from core.flow import FlowResult
 from ui.component_item import ComponentItem
 from ui.edge_item import EdgeItem
 from ui.colors import STROKE_COLOR
@@ -26,6 +27,7 @@ class ArchitectureScene(QGraphicsScene):
         self.component_edges_out: Dict[str, List[EdgeItem]] = {}
         self.edge_items: List[EdgeItem] = []
         self.active_component_id: str | None = None
+        self.flow_active = False
 
     def load_graph(self, graph: Graph) -> None:
         self.clear()
@@ -37,6 +39,7 @@ class ArchitectureScene(QGraphicsScene):
         self.component_edges_out.clear()
         self.edge_items.clear()
         self.active_component_id = None
+        self.flow_active = False
 
         self.draw_layer_backgrounds()
         self._create_nodes(graph.components)
@@ -75,12 +78,14 @@ class ArchitectureScene(QGraphicsScene):
         fill_item.setBrush(self._layer_gradient(LAYER_COLORS["domain"], radius))
         fill_item.setPen(Qt.PenStyle.NoPen)
         fill_item.setZValue(-100)
+        fill_item.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self.addItem(fill_item)
 
         outline = QGraphicsPolygonItem(polygon)
         outline.setBrush(Qt.BrushStyle.NoBrush)
         outline.setPen(self._outline_pen(2.0))
         outline.setZValue(-90)
+        outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(outline)
         self.addItem(outline)
         self.layer_backgrounds.setdefault("domain", []).extend([fill_item, outline])
@@ -100,12 +105,14 @@ class ArchitectureScene(QGraphicsScene):
         fill_item.setBrush(self._layer_gradient(LAYER_COLORS["application"], outer_radius))
         fill_item.setPen(Qt.PenStyle.NoPen)
         fill_item.setZValue(-99)
+        fill_item.setCacheMode(QGraphicsPathItem.CacheMode.DeviceCoordinateCache)
         self.addItem(fill_item)
 
         outer_outline = QGraphicsPolygonItem(outer)
         outer_outline.setBrush(Qt.BrushStyle.NoBrush)
         outer_outline.setPen(self._outline_pen(1.6))
         outer_outline.setZValue(-91)
+        outer_outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(outer_outline)
         self.addItem(outer_outline)
 
@@ -113,6 +120,7 @@ class ArchitectureScene(QGraphicsScene):
         inner_outline.setBrush(Qt.BrushStyle.NoBrush)
         inner_outline.setPen(self._outline_pen(1.6))
         inner_outline.setZValue(-91)
+        inner_outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(inner_outline)
         self.addItem(inner_outline)
         self.layer_backgrounds.setdefault("application", []).extend(
@@ -134,12 +142,14 @@ class ArchitectureScene(QGraphicsScene):
         fill_item.setBrush(self._layer_gradient(LAYER_COLORS["inbound_port"], outer_radius))
         fill_item.setPen(Qt.PenStyle.NoPen)
         fill_item.setZValue(-98.8)
+        fill_item.setCacheMode(QGraphicsPathItem.CacheMode.DeviceCoordinateCache)
         self.addItem(fill_item)
 
         outer_outline = QGraphicsPolygonItem(outer)
         outer_outline.setBrush(Qt.BrushStyle.NoBrush)
         outer_outline.setPen(self._outline_pen(1.4))
         outer_outline.setZValue(-90.5)
+        outer_outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(outer_outline)
         self.addItem(outer_outline)
 
@@ -147,6 +157,7 @@ class ArchitectureScene(QGraphicsScene):
         inner_outline.setBrush(Qt.BrushStyle.NoBrush)
         inner_outline.setPen(self._outline_pen(1.4))
         inner_outline.setZValue(-90.5)
+        inner_outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(inner_outline)
         self.addItem(inner_outline)
         self.layer_backgrounds.setdefault("ports", []).extend(
@@ -167,6 +178,7 @@ class ArchitectureScene(QGraphicsScene):
         outline.setBrush(Qt.BrushStyle.NoBrush)
         outline.setPen(self._outline_pen(1.2))
         outline.setZValue(-92)
+        outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(outline)
         self.addItem(outline)
         self.layer_backgrounds.setdefault("adapter_zone", []).append(outline)
@@ -188,6 +200,7 @@ class ArchitectureScene(QGraphicsScene):
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             item.setPen(pen)
             item.setZValue(-98)
+            item.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
             self.addItem(item)
             if side in (2, 3):
                 layer_key = "inbound_adapter"
@@ -212,12 +225,14 @@ class ArchitectureScene(QGraphicsScene):
         fill_item.setBrush(self._layer_gradient(LAYER_COLORS["unknown"], outer_radius))
         fill_item.setPen(Qt.PenStyle.NoPen)
         fill_item.setZValue(-97)
+        fill_item.setCacheMode(QGraphicsPathItem.CacheMode.DeviceCoordinateCache)
         self.addItem(fill_item)
 
         outline = QGraphicsPolygonItem(outer)
         outline.setBrush(Qt.BrushStyle.NoBrush)
         outline.setPen(self._outline_pen(1.0))
         outline.setZValue(-93)
+        outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(outline)
         self.addItem(outline)
         self.layer_backgrounds.setdefault("unknown", []).extend([fill_item, outline])
@@ -235,6 +250,7 @@ class ArchitectureScene(QGraphicsScene):
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         item.setPen(pen)
         item.setZValue(-96)
+        item.setCacheMode(QGraphicsPathItem.CacheMode.DeviceCoordinateCache)
         self.addItem(item)
         self.layer_backgrounds.setdefault("unknown", []).append(item)
 
@@ -288,35 +304,30 @@ class ArchitectureScene(QGraphicsScene):
     def layout_domain_nodes(self, components: List[Component]) -> Dict[str, QPointF]:
         if not components:
             return {}
-        positions: Dict[str, QPointF] = {}
-        base_radius = self.layout.domain_radius * 0.35
-        ring_gap = 26
-        for idx, component in enumerate(components):
-            ring = idx // 6
-            ring_radius = base_radius + ring * ring_gap
-            ring_items = min(6, len(components) - ring * 6)
-            sectors = max(ring_items, 6)
-            angle = -math.pi / 2 + (idx % 6) * (2 * math.pi / sectors)
-            x = math.cos(angle) * ring_radius
-            y = math.sin(angle) * ring_radius
-            positions[component.id] = QPointF(x, y)
-        return positions
+        inner_radius = self.layout.domain_radius * 0.22
+        outer_radius = self.layout.domain_radius - 18
+        return self._layout_concentric_rings(
+            components,
+            inner_radius=inner_radius,
+            outer_radius=outer_radius,
+            ring_spacing=28.0,
+            padding_x=12.0,
+        )
 
     def layout_application_nodes(self, components: List[Component]) -> Dict[str, QPointF]:
         if not components:
             return {}
         inner_radius = self.layout.domain_radius + 40
         outer_radius = self.layout.application_radius
-        mid_radius = (inner_radius + outer_radius) / 2
-        positions: Dict[str, QPointF] = {}
-        sectors = max(len(components), 6)
-        angle_step = 2 * math.pi / sectors
-        for idx, component in enumerate(components):
-            angle = -math.pi / 2 + idx * angle_step
-            x = math.cos(angle) * mid_radius
-            y = math.sin(angle) * mid_radius
-            positions[component.id] = QPointF(x, y)
-        return positions
+        inner_radius = inner_radius + 12
+        outer_radius = outer_radius - 16
+        return self._layout_concentric_rings(
+            components,
+            inner_radius=inner_radius,
+            outer_radius=outer_radius,
+            ring_spacing=30.0,
+            padding_x=12.0,
+        )
 
     def layout_adapter_nodes(
         self, inbound: List[Component], outbound: List[Component]
@@ -356,10 +367,14 @@ class ArchitectureScene(QGraphicsScene):
         outer_radius = self.layout.ports_radius
         mid_radius = (inner_radius + outer_radius) / 2
         positions.update(
-            self._place_on_arc(inbound, mid_radius, math.radians(150), math.radians(330))
+            self._place_on_arc_non_overlapping(
+                inbound, mid_radius, math.radians(150), math.radians(330), min_radius=inner_radius + 10
+            )
         )
         positions.update(
-            self._place_on_arc(outbound, mid_radius, math.radians(-30), math.radians(150))
+            self._place_on_arc_non_overlapping(
+                outbound, mid_radius, math.radians(-40), math.radians(80), min_radius=inner_radius + 10
+            )
         )
         return positions
 
@@ -393,6 +408,37 @@ class ArchitectureScene(QGraphicsScene):
         for edge in self.edge_items:
             edge.set_highlighted(False)
 
+    def apply_flow(self, flow: FlowResult, start_id: str) -> None:
+        node_ids = {component.id for component in flow.nodes}
+        edge_ids = {(edge.source_id, edge.target_id) for edge in flow.edges}
+        self.flow_active = True
+        for component_id, item in self.component_items.items():
+            in_flow = component_id in node_ids
+            item.set_flow_state(in_flow, is_start=component_id == start_id)
+            item.setOpacity(1.0 if in_flow else 0.18)
+        for edge in self.edge_items:
+            in_flow = (
+                edge.source_item.component.id,
+                edge.target_item.component.id,
+            ) in edge_ids
+            edge.set_flow_state(in_flow)
+            edge.setOpacity(0.9 if in_flow else 0.15)
+        for items in self.layer_backgrounds.values():
+            for item in items:
+                item.setOpacity(0.2)
+
+    def clear_flow(self) -> None:
+        self.flow_active = False
+        for item in self.component_items.values():
+            item.set_flow_state(False, False)
+            item.setOpacity(1.0)
+        for edge in self.edge_items:
+            edge.set_flow_state(False)
+            edge.setOpacity(0.55)
+        for items in self.layer_backgrounds.values():
+            for item in items:
+                item.setOpacity(1.0)
+
     def _place_on_side_arcs(
         self, components: List[Component], radius: float, sides: List[int]
     ) -> Dict[str, QPointF]:
@@ -409,14 +455,16 @@ class ArchitectureScene(QGraphicsScene):
                 continue
             start_angle = math.radians(side * 60 - 30)
             end_angle = math.radians(side * 60 + 30)
-            for idx, component in enumerate(items):
-                if len(items) == 1:
-                    angle = (start_angle + end_angle) / 2
-                else:
-                    angle = start_angle + (end_angle - start_angle) * (idx / (len(items) - 1))
-                x = math.cos(angle) * radius
-                y = math.sin(angle) * radius
-                positions[component.id] = QPointF(x, y)
+            positions.update(
+                self._place_on_arc_non_overlapping(
+                    items,
+                    radius=radius,
+                    start_angle=start_angle,
+                    end_angle=end_angle,
+                    min_radius=radius,
+                    padding=12.0,
+                )
+            )
         return positions
 
     def _place_on_arc(
@@ -425,14 +473,69 @@ class ArchitectureScene(QGraphicsScene):
         if not components:
             return {}
         positions: Dict[str, QPointF] = {}
-        count = len(components)
+        arc_span = end_angle - start_angle
+        capacity = max(2, int(arc_span / self._min_angle(radius)))
+        ring_gap = 26
         for idx, component in enumerate(components):
-            if count == 1:
+            ring = idx // capacity
+            ring_radius = radius + ring * ring_gap
+            ring_index = idx % capacity
+            ring_items = min(capacity, len(components) - ring * capacity)
+            if ring_items == 1:
                 angle = (start_angle + end_angle) / 2
             else:
-                angle = start_angle + (end_angle - start_angle) * (idx / (count - 1))
-            x = math.cos(angle) * radius
-            y = math.sin(angle) * radius
+                angle = start_angle + arc_span * (ring_index / (ring_items - 1))
+            x = math.cos(angle) * ring_radius
+            y = math.sin(angle) * ring_radius
+            positions[component.id] = QPointF(x, y)
+        return positions
+
+    def _place_on_arc_non_overlapping(
+        self,
+        components: List[Component],
+        radius: float,
+        start_angle: float,
+        end_angle: float,
+        min_radius: float,
+        padding: float = 12.0,
+    ) -> Dict[str, QPointF]:
+        if not components:
+            return {}
+        span = end_angle - start_angle
+        widths = []
+        for component in components:
+            item = self.component_items.get(component.id)
+            width = item.boundingRect().width() if item else 80.0
+            widths.append(width + padding)
+        total_arc = sum(widths)
+        required_radius = total_arc / max(span, 0.001)
+        radius = max(radius, required_radius, min_radius)
+        positions: Dict[str, QPointF] = {}
+        angle = start_angle
+        for component, arc_width in zip(components, widths):
+            needed = arc_width / radius
+            center_angle = angle + needed / 2.0
+            x = math.cos(center_angle) * radius
+            y = math.sin(center_angle) * radius
+            positions[component.id] = QPointF(x, y)
+            angle += needed
+        return positions
+
+    def _layout_on_rings(
+        self, components: List[Component], base_radius: float, ring_gap: float
+    ) -> Dict[str, QPointF]:
+        positions: Dict[str, QPointF] = {}
+        capacity = self._ring_capacity(base_radius)
+        for idx, component in enumerate(components):
+            ring = idx // capacity
+            ring_radius = base_radius + ring * ring_gap
+            ring_index = idx % capacity
+            ring_items = min(capacity, len(components) - ring * capacity)
+            sectors = max(ring_items, 6)
+            angle_step = self._angle_step(ring_radius, sectors)
+            angle = -math.pi / 2 + ring_index * angle_step
+            x = math.cos(angle) * ring_radius
+            y = math.sin(angle) * ring_radius
             positions[component.id] = QPointF(x, y)
         return positions
 
@@ -480,6 +583,91 @@ class ArchitectureScene(QGraphicsScene):
         shadow_color.setAlphaF(0.12)
         shadow.setColor(shadow_color)
         item.setGraphicsEffect(shadow)
+
+    def _min_angle(self, radius: float) -> float:
+        estimated_width = 80.0
+        return max(2 * math.pi / 12, estimated_width / max(radius, 1))
+
+    def _angle_step(self, radius: float, sectors: int) -> float:
+        return max(2 * math.pi / max(sectors, 6), self._min_angle(radius))
+
+    def _ring_capacity(self, radius: float) -> int:
+        return max(6, int((2 * math.pi) / self._min_angle(radius)))
+
+    def _layout_concentric_rings(
+        self,
+        components: List[Component],
+        inner_radius: float,
+        outer_radius: float,
+        ring_spacing: float,
+        padding_x: float,
+        angle_start: float = -math.pi,
+        angle_end: float = math.pi,
+    ) -> Dict[str, QPointF]:
+        positions: Dict[str, QPointF] = {}
+        if not components:
+            return positions
+
+        radii = []
+        radius = inner_radius
+        while radius <= outer_radius:
+            radii.append(radius)
+            radius += ring_spacing
+
+        if not radii:
+            radii = [inner_radius]
+
+        avg_width = self._average_node_width(components)
+        ring_caps = []
+        for r in radii:
+            circumference = 2 * math.pi * r
+            max_nodes = max(1, int(circumference // (avg_width + padding_x)))
+            ring_caps.append(max_nodes)
+
+        assignments: Dict[int, List[Component]] = {i: [] for i in range(len(radii))}
+        ring_index = 0
+        for component in components:
+            while ring_index < len(radii) and len(assignments[ring_index]) >= ring_caps[ring_index]:
+                ring_index += 1
+            if ring_index >= len(radii):
+                ring_index = len(radii) - 1
+            assignments[ring_index].append(component)
+
+        for idx, nodes_on_ring in assignments.items():
+            if not nodes_on_ring:
+                continue
+            radius = radii[idx]
+            arc_lengths = []
+            total_arc = 0.0
+            for component in nodes_on_ring:
+                item = self.component_items.get(component.id)
+                width = item.boundingRect().width() if item else avg_width
+                arc = width + padding_x
+                arc_lengths.append(arc)
+                total_arc += arc
+            available = max(0.001, (angle_end - angle_start) * radius)
+            if total_arc > available:
+                scale = available / total_arc
+                arc_lengths = [arc * scale for arc in arc_lengths]
+                total_arc = sum(arc_lengths)
+            angle = angle_start + ((angle_end - angle_start) - total_arc / radius) / 2.0
+            for component, arc in zip(nodes_on_ring, arc_lengths):
+                angle_span = arc / radius
+                center_angle = angle + angle_span / 2.0
+                x = math.cos(center_angle) * radius
+                y = math.sin(center_angle) * radius
+                positions[component.id] = QPointF(x, y)
+                angle += angle_span
+
+        return positions
+
+    def _average_node_width(self, components: List[Component]) -> float:
+        widths = []
+        for component in components:
+            item = self.component_items.get(component.id)
+            if item:
+                widths.append(item.boundingRect().width())
+        return sum(widths) / len(widths) if widths else 80.0
 
     def _hex_polygon(self, center: QPointF, radius: float) -> QPolygonF:
         return QPolygonF(self._hex_points(center, radius))
