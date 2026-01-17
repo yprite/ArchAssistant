@@ -1,0 +1,627 @@
+{
+  "components": [
+    {
+      "id": "com.example.shop.support.FeatureFlagService",
+      "name": "FeatureFlagService",
+      "path": "src/main/java/com/example/shop/support/FeatureFlagService.java",
+      "package": "com.example.shop.support",
+      "layer": "application",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.support.ClockProvider",
+      "name": "ClockProvider",
+      "path": "src/main/java/com/example/shop/support/ClockProvider.java",
+      "package": "com.example.shop.support",
+      "layer": "unknown",
+      "annotations": [],
+      "imports": [
+        "java.time.Instant"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.PlaceOrderService",
+      "name": "PlaceOrderService",
+      "path": "src/main/java/com/example/shop/application/PlaceOrderService.java",
+      "package": "com.example.shop.application",
+      "layer": "application",
+      "annotations": [
+        "Service"
+      ],
+      "imports": [
+        "com.example.shop.application.port.in.PlaceOrderCommand",
+        "com.example.shop.application.port.in.PlaceOrderUseCase",
+        "com.example.shop.application.port.out.NotificationGateway",
+        "com.example.shop.application.port.out.OrderRepositoryPort",
+        "com.example.shop.application.port.out.PaymentGateway",
+        "com.example.shop.domain.model.Customer",
+        "com.example.shop.domain.model.Order",
+        "com.example.shop.domain.model.OrderId",
+        "com.example.shop.domain.model.Payment",
+        "com.example.shop.domain.value.Money",
+        "java.math.BigDecimal",
+        "org.springframework.stereotype.Service"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.OrderQueryService",
+      "name": "OrderQueryService",
+      "path": "src/main/java/com/example/shop/application/OrderQueryService.java",
+      "package": "com.example.shop.application",
+      "layer": "application",
+      "annotations": [
+        "Service"
+      ],
+      "imports": [
+        "com.example.shop.application.port.in.GetOrderQuery",
+        "com.example.shop.application.port.out.OrderRepositoryPort",
+        "com.example.shop.domain.model.Order",
+        "com.example.shop.domain.model.OrderId",
+        "org.springframework.stereotype.Service"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.PaymentService",
+      "name": "PaymentService",
+      "path": "src/main/java/com/example/shop/application/PaymentService.java",
+      "package": "com.example.shop.application",
+      "layer": "application",
+      "annotations": [
+        "Service"
+      ],
+      "imports": [
+        "com.example.shop.application.port.out.PaymentGateway",
+        "com.example.shop.domain.model.Payment",
+        "org.springframework.stereotype.Service"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.CancelOrderService",
+      "name": "CancelOrderService",
+      "path": "src/main/java/com/example/shop/application/CancelOrderService.java",
+      "package": "com.example.shop.application",
+      "layer": "application",
+      "annotations": [
+        "Service"
+      ],
+      "imports": [
+        "com.example.shop.application.port.in.CancelOrderUseCase",
+        "com.example.shop.application.port.out.OrderRepositoryPort",
+        "com.example.shop.domain.model.Order",
+        "com.example.shop.domain.model.OrderId",
+        "org.springframework.stereotype.Service"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.OrderEntity",
+      "name": "OrderEntity",
+      "path": "src/main/java/com/example/shop/domain/OrderEntity.java",
+      "package": "com.example.shop.domain",
+      "layer": "domain",
+      "annotations": [
+        "Entity"
+      ],
+      "imports": [
+        "jakarta.persistence.Entity",
+        "jakarta.persistence.Id"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.value.Money",
+      "name": "Money",
+      "path": "src/main/java/com/example/shop/domain/value/Money.java",
+      "package": "com.example.shop.domain.value",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [
+        "java.math.BigDecimal"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.model.Order",
+      "name": "Order",
+      "path": "src/main/java/com/example/shop/domain/model/Order.java",
+      "package": "com.example.shop.domain.model",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [
+        "java.time.Instant",
+        "java.util.ArrayList",
+        "java.util.List"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.model.OrderId",
+      "name": "OrderId",
+      "path": "src/main/java/com/example/shop/domain/model/OrderId.java",
+      "package": "com.example.shop.domain.model",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [
+        "java.util.UUID"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.model.Customer",
+      "name": "Customer",
+      "path": "src/main/java/com/example/shop/domain/model/Customer.java",
+      "package": "com.example.shop.domain.model",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.model.Payment",
+      "name": "Payment",
+      "path": "src/main/java/com/example/shop/domain/model/Payment.java",
+      "package": "com.example.shop.domain.model",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [
+        "com.example.shop.domain.value.Money"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.model.LineItem",
+      "name": "LineItem",
+      "path": "src/main/java/com/example/shop/domain/model/LineItem.java",
+      "package": "com.example.shop.domain.model",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.model.OrderStatus",
+      "name": "OrderStatus",
+      "path": "src/main/java/com/example/shop/domain/model/OrderStatus.java",
+      "package": "com.example.shop.domain.model",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.domain.model.Address",
+      "name": "Address",
+      "path": "src/main/java/com/example/shop/domain/model/Address.java",
+      "package": "com.example.shop.domain.model",
+      "layer": "domain",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.out.PaymentGateway",
+      "name": "PaymentGateway",
+      "path": "src/main/java/com/example/shop/application/port/out/PaymentGateway.java",
+      "package": "com.example.shop.application.port.out",
+      "layer": "outbound_port",
+      "annotations": [],
+      "imports": [
+        "com.example.shop.domain.model.Payment"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.out.ShippingClient",
+      "name": "ShippingClient",
+      "path": "src/main/java/com/example/shop/application/port/out/ShippingClient.java",
+      "package": "com.example.shop.application.port.out",
+      "layer": "outbound_port",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.out.NotificationGateway",
+      "name": "NotificationGateway",
+      "path": "src/main/java/com/example/shop/application/port/out/NotificationGateway.java",
+      "package": "com.example.shop.application.port.out",
+      "layer": "outbound_port",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "name": "OrderRepositoryPort",
+      "path": "src/main/java/com/example/shop/application/port/out/OrderRepositoryPort.java",
+      "package": "com.example.shop.application.port.out",
+      "layer": "outbound_port",
+      "annotations": [],
+      "imports": [
+        "com.example.shop.domain.model.Order",
+        "com.example.shop.domain.model.OrderId"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.in.PlaceOrderUseCase",
+      "name": "PlaceOrderUseCase",
+      "path": "src/main/java/com/example/shop/application/port/in/PlaceOrderUseCase.java",
+      "package": "com.example.shop.application.port.in",
+      "layer": "inbound_port",
+      "annotations": [],
+      "imports": [
+        "com.example.shop.domain.model.OrderId"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.in.GetOrderQuery",
+      "name": "GetOrderQuery",
+      "path": "src/main/java/com/example/shop/application/port/in/GetOrderQuery.java",
+      "package": "com.example.shop.application.port.in",
+      "layer": "inbound_port",
+      "annotations": [],
+      "imports": [
+        "com.example.shop.domain.model.Order"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.in.PlaceOrderCommand",
+      "name": "PlaceOrderCommand",
+      "path": "src/main/java/com/example/shop/application/port/in/PlaceOrderCommand.java",
+      "package": "com.example.shop.application.port.in",
+      "layer": "application",
+      "annotations": [],
+      "imports": [
+        "java.util.List"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.application.port.in.CancelOrderUseCase",
+      "name": "CancelOrderUseCase",
+      "path": "src/main/java/com/example/shop/application/port/in/CancelOrderUseCase.java",
+      "package": "com.example.shop.application.port.in",
+      "layer": "inbound_port",
+      "annotations": [],
+      "imports": [],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.adapter.inbound.OrderController",
+      "name": "OrderController",
+      "path": "src/main/java/com/example/shop/adapter/inbound/OrderController.java",
+      "package": "com.example.shop.adapter.inbound",
+      "layer": "inbound_adapter",
+      "annotations": [
+        "RestController"
+      ],
+      "imports": [
+        "com.example.shop.application.port.in.PlaceOrderCommand",
+        "com.example.shop.application.port.in.PlaceOrderUseCase",
+        "org.springframework.web.bind.annotation.PostMapping",
+        "org.springframework.web.bind.annotation.RestController"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.adapter.inbound.OrderEventsListener",
+      "name": "OrderEventsListener",
+      "path": "src/main/java/com/example/shop/adapter/inbound/OrderEventsListener.java",
+      "package": "com.example.shop.adapter.inbound",
+      "layer": "unknown",
+      "annotations": [
+        "Component"
+      ],
+      "imports": [
+        "org.springframework.kafka.annotation.KafkaListener",
+        "org.springframework.stereotype.Component"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.adapter.inbound.AdminOrderController",
+      "name": "AdminOrderController",
+      "path": "src/main/java/com/example/shop/adapter/inbound/AdminOrderController.java",
+      "package": "com.example.shop.adapter.inbound",
+      "layer": "inbound_adapter",
+      "annotations": [
+        "RestController"
+      ],
+      "imports": [
+        "com.example.shop.application.port.in.CancelOrderUseCase",
+        "org.springframework.web.bind.annotation.DeleteMapping",
+        "org.springframework.web.bind.annotation.RestController"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.adapter.outbound.integration.StripePaymentGateway",
+      "name": "StripePaymentGateway",
+      "path": "src/main/java/com/example/shop/adapter/outbound/integration/StripePaymentGateway.java",
+      "package": "com.example.shop.adapter.outbound.integration",
+      "layer": "unknown",
+      "annotations": [
+        "Component"
+      ],
+      "imports": [
+        "com.example.shop.application.port.out.PaymentGateway",
+        "com.example.shop.domain.model.Payment",
+        "org.springframework.stereotype.Component"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.adapter.outbound.integration.ShippingApiClient",
+      "name": "ShippingApiClient",
+      "path": "src/main/java/com/example/shop/adapter/outbound/integration/ShippingApiClient.java",
+      "package": "com.example.shop.adapter.outbound.integration",
+      "layer": "unknown",
+      "annotations": [
+        "Component"
+      ],
+      "imports": [
+        "com.example.shop.application.port.out.ShippingClient",
+        "org.springframework.stereotype.Component"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.adapter.outbound.integration.EmailNotificationAdapter",
+      "name": "EmailNotificationAdapter",
+      "path": "src/main/java/com/example/shop/adapter/outbound/integration/EmailNotificationAdapter.java",
+      "package": "com.example.shop.adapter.outbound.integration",
+      "layer": "unknown",
+      "annotations": [
+        "Component"
+      ],
+      "imports": [
+        "com.example.shop.application.port.out.NotificationGateway",
+        "org.springframework.stereotype.Component"
+      ],
+      "metrics": {}
+    },
+    {
+      "id": "com.example.shop.adapter.outbound.persistence.JpaOrderRepository",
+      "name": "JpaOrderRepository",
+      "path": "src/main/java/com/example/shop/adapter/outbound/persistence/JpaOrderRepository.java",
+      "package": "com.example.shop.adapter.outbound.persistence",
+      "layer": "outbound_adapter",
+      "annotations": [
+        "Repository"
+      ],
+      "imports": [
+        "com.example.shop.application.port.out.OrderRepositoryPort",
+        "com.example.shop.domain.model.Order",
+        "com.example.shop.domain.model.OrderId",
+        "org.springframework.stereotype.Repository"
+      ],
+      "metrics": {}
+    }
+  ],
+  "dependencies": [
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.application.port.in.PlaceOrderCommand",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.application.port.in.PlaceOrderUseCase",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.application.port.out.NotificationGateway",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.application.port.out.PaymentGateway",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.domain.model.Customer",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.domain.model.Order",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.domain.model.OrderId",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.domain.model.Payment",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.domain.value.Money",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PlaceOrderService",
+      "target_id": "com.example.shop.application.port.in.PlaceOrderUseCase",
+      "kind": "implements"
+    },
+    {
+      "source_id": "com.example.shop.application.OrderQueryService",
+      "target_id": "com.example.shop.application.port.in.GetOrderQuery",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.OrderQueryService",
+      "target_id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.OrderQueryService",
+      "target_id": "com.example.shop.domain.model.Order",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.OrderQueryService",
+      "target_id": "com.example.shop.domain.model.OrderId",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.OrderQueryService",
+      "target_id": "com.example.shop.application.port.in.GetOrderQuery",
+      "kind": "implements"
+    },
+    {
+      "source_id": "com.example.shop.application.PaymentService",
+      "target_id": "com.example.shop.application.port.out.PaymentGateway",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.PaymentService",
+      "target_id": "com.example.shop.domain.model.Payment",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.CancelOrderService",
+      "target_id": "com.example.shop.application.port.in.CancelOrderUseCase",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.CancelOrderService",
+      "target_id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.CancelOrderService",
+      "target_id": "com.example.shop.domain.model.Order",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.CancelOrderService",
+      "target_id": "com.example.shop.domain.model.OrderId",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.CancelOrderService",
+      "target_id": "com.example.shop.application.port.in.CancelOrderUseCase",
+      "kind": "implements"
+    },
+    {
+      "source_id": "com.example.shop.domain.model.Payment",
+      "target_id": "com.example.shop.domain.value.Money",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.port.out.PaymentGateway",
+      "target_id": "com.example.shop.domain.model.Payment",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "target_id": "com.example.shop.domain.model.Order",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "target_id": "com.example.shop.domain.model.OrderId",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.port.in.PlaceOrderUseCase",
+      "target_id": "com.example.shop.domain.model.OrderId",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.application.port.in.GetOrderQuery",
+      "target_id": "com.example.shop.domain.model.Order",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.inbound.OrderController",
+      "target_id": "com.example.shop.application.port.in.PlaceOrderCommand",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.inbound.OrderController",
+      "target_id": "com.example.shop.application.port.in.PlaceOrderUseCase",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.inbound.AdminOrderController",
+      "target_id": "com.example.shop.application.port.in.CancelOrderUseCase",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.integration.StripePaymentGateway",
+      "target_id": "com.example.shop.application.port.out.PaymentGateway",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.integration.StripePaymentGateway",
+      "target_id": "com.example.shop.domain.model.Payment",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.integration.StripePaymentGateway",
+      "target_id": "com.example.shop.application.port.out.PaymentGateway",
+      "kind": "implements"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.integration.ShippingApiClient",
+      "target_id": "com.example.shop.application.port.out.ShippingClient",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.integration.ShippingApiClient",
+      "target_id": "com.example.shop.application.port.out.ShippingClient",
+      "kind": "implements"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.integration.EmailNotificationAdapter",
+      "target_id": "com.example.shop.application.port.out.NotificationGateway",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.integration.EmailNotificationAdapter",
+      "target_id": "com.example.shop.application.port.out.NotificationGateway",
+      "kind": "implements"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.persistence.JpaOrderRepository",
+      "target_id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.persistence.JpaOrderRepository",
+      "target_id": "com.example.shop.domain.model.Order",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.persistence.JpaOrderRepository",
+      "target_id": "com.example.shop.domain.model.OrderId",
+      "kind": "import"
+    },
+    {
+      "source_id": "com.example.shop.adapter.outbound.persistence.JpaOrderRepository",
+      "target_id": "com.example.shop.application.port.out.OrderRepositoryPort",
+      "kind": "implements"
+    }
+  ]
+}
