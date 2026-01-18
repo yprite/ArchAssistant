@@ -14,11 +14,12 @@ class LeftSidebar(QWidget):
         self.filters_panel = FiltersPanel()
         self.legend_panel = LegendPanel()
         self.help_panel = InspectorHelpPanel()
-        self.tabs.addTab(self.filters_panel, "Filters")
-        self.tabs.addTab(self.legend_panel, "Legend")
-        self.tabs.addTab(self.help_panel, "Inspector Help")
+        self.tabs.addTab(self.filters_panel, "필터")
+        self.tabs.addTab(self.legend_panel, "범례")
+        self.tabs.addTab(self.help_panel, "인스펙터 도움말")
 
         self.setLayout(self._build_layout())
+        self._apply_styles()
 
     @property
     def filter_boxes(self):
@@ -31,3 +32,11 @@ class LeftSidebar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.tabs)
         return layout
+
+    def _apply_styles(self) -> None:
+        self.tabs.setStyleSheet(
+            "QTabWidget::pane { border: 0; }"
+            "QTabBar::tab { padding: 8px 14px; margin-right: 6px; border-radius: 10px;"
+            " font-family: 'Gmarket Sans'; font-weight: 600; }"
+            "QTabBar::tab:selected { background: palette(light); }"
+        )

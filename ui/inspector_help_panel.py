@@ -10,7 +10,9 @@ class InspectorHelpPanel(QWidget):
         super().__init__()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(scroll.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(
+            scroll.horizontalScrollBarPolicy().ScrollBarAlwaysOff
+        )
 
         content = QWidget()
         content_layout = QVBoxLayout(content)
@@ -19,7 +21,9 @@ class InspectorHelpPanel(QWidget):
 
         for title, body in _HELP_ITEMS:
             title_label = QLabel(title)
-            title_label.setStyleSheet("font-weight: 700;")
+            title_label.setStyleSheet(
+                "font-family: 'Gmarket Sans'; font-weight: 700;"
+            )
             body_label = QLabel(body)
             body_label.setWordWrap(True)
             body_label.setStyleSheet(f"color: {TEXT_SECONDARY.name()};")
@@ -51,19 +55,19 @@ _HELP_ITEMS = [
         "Outbound Port, Inbound Adapter, Outbound Adapter, Unknown 등.",
     ),
     (
-        "Package / Namespace (패키지)",
+        "패키지 / 네임스페이스",
         "코드 구조 상에서 이 컴포넌트가 속한 패키지 또는 네임스페이스입니다. "
-        "Bounded Context 및 모듈 경계를 유추하는 기준으로 사용됩니다.",
+        "바운디드 컨텍스트 및 모듈 경계를 유추하는 기준으로 사용됩니다.",
     ),
     (
-        "Path / File path (경로)",
-        "실제 소스 파일의 절대/상대 경로입니다. 'Open in File Explorer' 버튼과 연결됩니다.",
+        "경로",
+        "실제 소스 파일의 절대/상대 경로입니다. '파일 위치 열기' 버튼과 연결됩니다.",
     ),
     (
         "Annotations (어노테이션)",
         "이 클래스에 붙어 있는 프레임워크 어노테이션 목록입니다. "
         "예: @RestController, @Service, @Repository, @Entity 등. "
-        "역할 추론, Layer 판별, Smell/Rule 검사에 사용됩니다.",
+        "역할 추론, 레이어 판별, 스멜/규칙 검사에 사용됩니다.",
     ),
     (
         "Imports (의존성)",

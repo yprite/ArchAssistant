@@ -23,8 +23,10 @@ from analyzer.model import Component
 class InspectorPanel(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        title = QLabel("Inspector")
-        title.setStyleSheet("font-weight: 700; font-size: 14px;")
+        title = QLabel("인스펙터")
+        title.setStyleSheet(
+            "font-family: 'Gmarket Sans'; font-weight: 700; font-size: 14px;"
+        )
         self.name_label = QLabel("-")
         self.layer_label = QLabel("-")
         self.package_label = QLabel("-")
@@ -33,31 +35,40 @@ class InspectorPanel(QWidget):
         self.path_label.setWordWrap(True)
         self.annotations_text = QTextEdit()
         self.imports_text = QTextEdit()
-        self.open_button = QPushButton("Open in File Explorer")
-        self.flow_button = QPushButton("Show Flow from Here")
-        self.animate_flow_button = QPushButton("Play Flow Animation")
-        self.clear_flow_button = QPushButton("Clear Flow")
-        self.report_button = QPushButton("Generate Use Case Report")
-        self.flow_title = QLabel("Flow")
-        self.flow_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        self.open_button = QPushButton("파일 위치 열기")
+        self.flow_button = QPushButton("여기서 흐름 보기")
+        self.animate_flow_button = QPushButton("흐름 애니메이션 재생")
+        self.clear_flow_button = QPushButton("흐름 지우기")
+        self.report_button = QPushButton("유스케이스 리포트 생성")
+        self.flow_title = QLabel("흐름")
+        self.flow_title.setStyleSheet(
+            "font-family: 'Gmarket Sans'; font-weight: 700; font-size: 13px;"
+        )
         self.flow_speed = QComboBox()
         self.flow_speed.addItems(["0.5x", "1x", "1.5x", "2x"])
         self.flow_speed.setCurrentText("1x")
         self.flow_list = QListWidget()
         self.flow_list.setFixedHeight(180)
+        self.flow_list.setAlternatingRowColors(True)
         self.flow_list.setVisible(False)
         self.flow_title.setVisible(False)
         self.clear_flow_button.setVisible(False)
-        self.violations_title = QLabel("Violations")
-        self.violations_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        self.violations_title = QLabel("규칙 위반")
+        self.violations_title.setStyleSheet(
+            "font-family: 'Gmarket Sans'; font-weight: 700; font-size: 13px;"
+        )
         self.violations_list = QListWidget()
         self.violations_list.setFixedHeight(140)
+        self.violations_list.setAlternatingRowColors(True)
         self.violations_title.setVisible(False)
         self.violations_list.setVisible(False)
-        self.smells_title = QLabel("DDD Smells")
-        self.smells_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        self.smells_title = QLabel("DDD 스멜")
+        self.smells_title.setStyleSheet(
+            "font-family: 'Gmarket Sans'; font-weight: 700; font-size: 13px;"
+        )
         self.smells_list = QListWidget()
         self.smells_list.setFixedHeight(140)
+        self.smells_list.setAlternatingRowColors(True)
         self.smells_title.setVisible(False)
         self.smells_list.setVisible(False)
         self.open_button.setEnabled(False)
@@ -70,19 +81,22 @@ class InspectorPanel(QWidget):
             widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         for label in (self.name_label, self.layer_label, self.package_label, self.path_label):
-            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         form_layout = QFormLayout()
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         form_layout.setHorizontalSpacing(12)
         form_layout.setVerticalSpacing(8)
-        form_layout.addRow("Name", self.name_label)
-        form_layout.addRow("Layer", self.layer_label)
-        form_layout.addRow("Package", self.package_label)
-        form_layout.addRow("Path", self.path_label)
-        form_layout.addRow("Annotations", self.annotations_text)
-        form_layout.addRow("Imports", self.imports_text)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form_layout.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form_layout.addRow("이름", self.name_label)
+        form_layout.addRow("레이어", self.layer_label)
+        form_layout.addRow("패키지", self.package_label)
+        form_layout.addRow("경로", self.path_label)
+        form_layout.addRow("어노테이션", self.annotations_text)
+        form_layout.addRow("임포트", self.imports_text)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(16, 16, 16, 16)
@@ -92,7 +106,7 @@ class InspectorPanel(QWidget):
         layout.addWidget(self.open_button)
         layout.addWidget(self.flow_button)
         layout.addWidget(self.animate_flow_button)
-        layout.addWidget(QLabel("Flow Speed"))
+        layout.addWidget(QLabel("흐름 속도"))
         layout.addWidget(self.flow_speed)
         layout.addWidget(self.clear_flow_button)
         layout.addWidget(self.report_button)
@@ -103,12 +117,10 @@ class InspectorPanel(QWidget):
         layout.addWidget(self.smells_title)
         layout.addWidget(self.smells_list)
         self.setLayout(layout)
+        # 다크모드 호환: 텍스트 색상 고정하지 않음
         self.setStyleSheet(
-            "QLabel { font-size: 13px; color: #333333; }"
+            "QLabel { font-size: 13px; }"
             "QTextEdit { font-size: 11px; }"
-            "QPushButton { padding: 8px 12px; border-radius: 8px;"
-            " background: #4A74E0; color: white; font-weight: 600; }"
-            "QPushButton:disabled { background: #BFC9E8; }"
         )
 
         self._current_path: Path | None = None
@@ -116,13 +128,13 @@ class InspectorPanel(QWidget):
         self.open_button.clicked.connect(self._open_path)
         self._current_component: Component | None = None
         self._layer_labels = {
-            "domain": "Domain",
-            "application": "Application",
-            "inbound_port": "Inbound Port",
-            "outbound_port": "Outbound Port",
-            "inbound_adapter": "Inbound Adapter",
-            "outbound_adapter": "Outbound Adapter",
-            "unknown": "Unknown",
+            "domain": "도메인",
+            "application": "애플리케이션",
+            "inbound_port": "인바운드 포트",
+            "outbound_port": "아웃바운드 포트",
+            "inbound_adapter": "인바운드 어댑터",
+            "outbound_adapter": "아웃바운드 어댑터",
+            "unknown": "미분류",
         }
 
     def set_base_path(self, base_path: Path | None) -> None:
@@ -173,7 +185,7 @@ class InspectorPanel(QWidget):
         self.flow_list.setVisible(True)
         self.clear_flow_button.setVisible(True)
         if not has_items:
-            self.flow_list.addItem(QListWidgetItem("No flow"))
+            self.flow_list.addItem(QListWidgetItem("흐름 없음"))
 
     def show_flow_steps(self, steps: list[str]) -> None:
         self.flow_list.clear()
@@ -205,7 +217,7 @@ class InspectorPanel(QWidget):
         self.violations_title.setVisible(True)
         self.violations_list.setVisible(True)
         if not items:
-            self.violations_list.addItem(QListWidgetItem("No violations"))
+            self.violations_list.addItem(QListWidgetItem("위반 없음"))
 
     def clear_component_violations(self) -> None:
         self.violations_list.clear()
@@ -219,7 +231,7 @@ class InspectorPanel(QWidget):
         self.smells_title.setVisible(True)
         self.smells_list.setVisible(True)
         if not items:
-            self.smells_list.addItem(QListWidgetItem("No smells detected"))
+            self.smells_list.addItem(QListWidgetItem("스멜 없음"))
 
     def clear_component_smells(self) -> None:
         self.smells_list.clear()
