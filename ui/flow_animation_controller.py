@@ -56,18 +56,26 @@ class FlowAnimationController(QObject):
         self._group.start()
 
     def step_forward(self) -> None:
-        if not self._steps or self._group.animationCount() == 0:
+        if not self._steps:
+            return
+        count = self._group.animationCount()
+        if count == 0:
             return
         if self._group.state() == QSequentialAnimationGroup.State.Running:
             self._group.pause()
         current = self._group.currentAnimation()
-        index = self._group.indexOfAnimation(current) if current else 0
-        if index < 0:
+        if current is None:
             index = 0
-        if index >= len(self._steps):
+        else:
+            index = self._group.indexOfAnimation(current)
+            if index < 0:
+                index = 0
+        # 다음 스텝으로 이동
+        next_index = min(index + 1, len(self._steps) - 1)
+        if next_index >= len(self._steps):
             return
-        self._activate_step(index)
-        self._animate_step(index, jump=True)
+        self._activate_step(next_index)
+        self._animate_step(next_index, jump=True)
 
     def set_speed(self, speed: float) -> None:
         self._speed = max(0.5, min(2.0, speed))
@@ -148,7 +156,10 @@ class FlowAnimationController(QObject):
         step.target_item.set_flow_visited(True)
 
     def _animate_step(self, index: int, jump: bool = False) -> None:
+        if index < 0 or index >= len(self._steps):
+            return
         if jump:
             step = self._steps[index]
             self._token.setVisible(True)
             self._token.setPos(step.target_item.sceneBoundingRect().center())
+            self._mark_visited(index)

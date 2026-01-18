@@ -495,34 +495,64 @@ class ArchitectureScene(QGraphicsScene):
             item.set_smell_active(color)
 
     def set_bc_filter(self, component_ids: set[str] | None) -> None:
-        if not component_ids:
-            for item in self.component_items.values():
-                item.setOpacity(1.0)
-            for edge in self.edge_items:
-                edge.setOpacity(0.55)
-            return
-        for component_id, item in self.component_items.items():
-            item.setOpacity(1.0 if component_id in component_ids else 0.12)
-        for edge in self.edge_items:
-            source_id = edge.source_item.component.id
-            target_id = edge.target_item.component.id
-            in_bc = source_id in component_ids and target_id in component_ids
-            edge.setOpacity(0.6 if in_bc else 0.08)
+        self._animate_opacity_filter(component_ids, mode="bc")
 
     def set_component_focus(self, component_ids: set[str] | None) -> None:
+        self._animate_opacity_filter(component_ids, mode="focus")
+
+    def _animate_opacity_filter(self, component_ids: set[str] | None, mode: str = "bc") -> None:
+        """부드러운 투명도 애니메이션으로 필터 적용"""
+        from PySide6.QtCore import QPropertyAnimation, QParallelAnimationGroup
+        
+        # 애니메이션 그룹 생성
+        if not hasattr(self, '_opacity_animations'):
+            self._opacity_animations = []
+        
+        # 기존 애니메이션 정지
+        for anim in self._opacity_animations:
+            if anim.state() == QPropertyAnimation.State.Running:
+                anim.stop()
+        self._opacity_animations.clear()
+        
         if not component_ids:
+            # 전체 복원
             for item in self.component_items.values():
-                item.setOpacity(1.0)
+                self._animate_item_opacity(item, 1.0)
             for edge in self.edge_items:
-                edge.setOpacity(0.55)
+                self._animate_item_opacity(edge, 0.55)
             return
+        
         for component_id, item in self.component_items.items():
-            item.setOpacity(1.0 if component_id in component_ids else 0.12)
+            target = 1.0 if component_id in component_ids else 0.12
+            self._animate_item_opacity(item, target)
+        
         for edge in self.edge_items:
             source_id = edge.source_item.component.id
             target_id = edge.target_item.component.id
-            in_focus = source_id in component_ids or target_id in component_ids
-            edge.setOpacity(0.6 if in_focus else 0.08)
+            if mode == "bc":
+                in_filter = source_id in component_ids and target_id in component_ids
+            else:
+                in_filter = source_id in component_ids or target_id in component_ids
+            target = 0.6 if in_filter else 0.08
+            self._animate_item_opacity(edge, target)
+
+    def _animate_item_opacity(self, item, target_opacity: float, duration: int = 200) -> None:
+        """단일 아이템에 opacity 애니메이션 적용"""
+        from PySide6.QtCore import QPropertyAnimation
+        
+        current = item.opacity()
+        if abs(current - target_opacity) < 0.01:
+            return  # 이미 목표값에 도달
+        
+        anim = QPropertyAnimation(item, b"opacity")
+        anim.setDuration(duration)
+        anim.setStartValue(current)
+        anim.setEndValue(target_opacity)
+        anim.start()
+        
+        if not hasattr(self, '_opacity_animations'):
+            self._opacity_animations = []
+        self._opacity_animations.append(anim)
 
     def _place_on_side_arcs(
         self, components: List[Component], radius: float, sides: List[int]

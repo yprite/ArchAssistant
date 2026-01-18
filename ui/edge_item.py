@@ -101,15 +101,15 @@ class EdgeItem(QGraphicsItem):
 
     def _default_pen(self) -> QPen:
         color = EDGE_COLOR
-        color.setAlphaF(0.55)
-        pen = QPen(color, 1.0)
+        color.setAlphaF(0.65)  # 투명도 증가 (0.55 -> 0.65)
+        pen = QPen(color, 1.4)  # 선 두께 증가 (1.0 -> 1.4)
         pen.setCosmetic(True)
         return pen
 
     def _highlight_pen(self) -> QPen:
         color = FLOW_ACTIVE if self._flow_active else FLOW_VISITED
-        color.setAlphaF(0.9)
-        pen = QPen(color, 2.2 if self._flow_active else 1.6)
+        color.setAlphaF(0.95)  # 투명도 증가
+        pen = QPen(color, 2.8 if self._flow_active else 2.2)  # 선 두께 증가
         pen.setCosmetic(True)
         return pen
 
@@ -158,7 +158,8 @@ class EdgeItem(QGraphicsItem):
 
     def _arrow_head(self, tail: QPointF, tip: QPointF) -> QPolygonF:
         angle = math.atan2(tip.y() - tail.y(), tip.x() - tail.x())
-        size = 4.0
+        # 화살표 크기 증가 (4.0 -> 6.0) + 호버 시 더 크게
+        size = 8.0 if self._is_highlighted() else 6.0
         left = QPointF(
             tip.x() - size * math.cos(angle - math.pi / 6),
             tip.y() - size * math.sin(angle - math.pi / 6),

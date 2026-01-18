@@ -41,6 +41,7 @@ class ComponentItem(QGraphicsObject):
         self._glow_intensity: float = 0.0
         self._is_dragging = False
         self._drag_start_pos = None
+        self._invalid_position = False  # 드래그 위치 검증
         self.setToolTip(self._build_tooltip())
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemIsMovable, True)  # 드래그 가능
@@ -74,7 +75,13 @@ class ComponentItem(QGraphicsObject):
             painter.drawRoundedRect(shadow_rect, self._pill_height / 2, self._pill_height / 2)
         
         # 노드 본체 그리기
-        if self._smell_color:
+        if self._invalid_position:
+            # 잘못된 위치: 빨간색 테두리 + 반투명 배경
+            pen_color = QColor("#EF4444")
+            fill = QColor("#EF4444")
+            fill.setAlphaF(0.3)
+            self._fill_color = fill
+        elif self._smell_color:
             pen_color = self._smell_color
         elif self._violation_active:
             pen_color = QColor("#EF4444")
@@ -118,6 +125,18 @@ class ComponentItem(QGraphicsObject):
             if delta.manhattanLength() > 5:
                 self._is_dragging = True
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                
+                # 레이어 위치 검증
+                pos = self.scenePos()
+                detected_layer = self._detect_layer_at_position(pos)
+                expected_layer = self.component.layer
+                
+                # 위치가 올바른지 확인
+                was_invalid = self._invalid_position
+                self._invalid_position = (detected_layer != expected_layer)
+                
+                if was_invalid != self._invalid_position:
+                    self.update()  # 상태 변경 시만 리페인트
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
@@ -128,6 +147,8 @@ class ComponentItem(QGraphicsObject):
             if self._is_dragging:
                 self._is_dragging = False
                 self.setCursor(Qt.CursorShape.ArrowCursor)
+                # 잘못된 위치면 상태 유지 (빨간색 표시 계속)
+                # 사용자가 올바른 위치로 이동하면 자동으로 복구됨
         super().mouseReleaseEvent(event)
 
     def hoverEnterEvent(self, event) -> None:  # type: ignore[override]
@@ -279,3 +300,51 @@ class ComponentItem(QGraphicsObject):
         width = max(55, min(95, text_width + self._pill_padding * 2))
         height = self._pill_height
         return QRectF(-width / 2, -height / 2, width, height)
+
+    def _detect_layer_at_position(self, pos) -> str:
+        """좌표 기반으로 현재 위치의 레이어를 감지"""
+        import math
+        
+        # 중심에서의 거리 계산
+        distance = math.hypot(pos.x(), pos.y())
+        
+        # 레이어별 반경 (LayoutConfig 기반)
+        domain_radius = self.layout.domain_radius
+        application_radius = self.layout.application_radius
+        ports_radius = self.layout.ports_radius
+        adapter_radius = self.layout.adapter_radius
+        unknown_radius = self.layout.unknown_radius
+        
+        # 거리 기반 레이어 판정
+        if distance <= domain_radius + 20:
+            return "domain"
+        elif distance <= application_radius + 20:
+            return "application"
+        elif distance <= ports_radius + 20:
+            # 포트 레이어: 각도에 따라 inbound/outbound 구분
+            angle = math.degrees(math.atan2(pos.y(), pos.x()))
+            if 100 <= angle <= 180 or -180 <= angle <= -100:
+                return "inbound_port"
+            elif -80 <= angle <= 80:
+                return "outbound_port"
+            return "inbound_port"  # 기본값
+        elif distance <= adapter_radius + 20:
+            # 어댑터 레이어: 각도에 따라 inbound/outbound 구분
+            angle = math.degrees(math.atan2(pos.y(), pos.x()))
+            if 100 <= angle <= 180 or -180 <= angle <= -100:
+                return "inbound_adapter"
+            elif -80 <= angle <= 80:
+                return "outbound_adapter"
+            return "inbound_adapter"  # 기본값
+        else:
+            return "unknown"
+
+    def reset_invalid_position(self) -> None:
+        """잘못된 위치 상태 리셋"""
+        if self._invalid_position:
+            self._invalid_position = False
+            # 원래 색상으로 복원
+            self._fill_color = QColor(self.color).darker(110)
+            self._fill_color.setAlphaF(0.26)
+            self.update()
+
