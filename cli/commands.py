@@ -36,7 +36,7 @@ def analyze_rules_command(graph_path: Path) -> int:
     return 0
 
 
-def open_ui(graph, project_root: Path | None) -> int:
+def open_ui(graph, project_root: Path | None, watch: bool = False) -> int:
     try:
         from PySide6.QtWidgets import QApplication
 
@@ -51,5 +51,7 @@ def open_ui(graph, project_root: Path | None) -> int:
         window.project_root = project_root
         window.inspector.set_base_path(project_root)
     window._load_graph(graph)
+    if watch and project_root:
+        window.start_watch(project_root)
     window.show()
     return app.exec()

@@ -25,7 +25,7 @@ def main() -> int:
     if args.no_ui:
         return 0
 
-    return open_ui(graph, project_root)
+    return open_ui(graph, project_root, watch=True)
 
 
 if __name__ == "__main__":
