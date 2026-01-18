@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QTimer
 from PySide6.QtGui import QAction, QDesktopServices, QColor, QPainter, QBrush, QPixmap, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -139,6 +139,10 @@ class MainWindow(QMainWindow):
         self._header_actions_container: QWidget | None = None
         self._header_actions_layout: QHBoxLayout | None = None
         self._summary_report_action: QAction | None = None
+        self._watch_timer: QTimer | None = None
+        self._watch_snapshot: dict[str, float] = {}
+        self._watch_root: Path | None = None
+        self._watch_in_progress = False
         self._apply_theme()
 
     def _init_actions(self) -> None:
@@ -1575,6 +1579,70 @@ class MainWindow(QMainWindow):
             }}
             """
         )
+
+    def start_watch(self, project_root: Path, interval_ms: int = 1000) -> None:
+        self._watch_root = project_root
+        if self._watch_timer is None:
+            self._watch_timer = QTimer(self)
+            self._watch_timer.setInterval(interval_ms)
+            self._watch_timer.timeout.connect(self._poll_watch_changes)
+        self._watch_snapshot = self._snapshot_project_files()
+        self._watch_timer.start()
+        self._set_header_status("파일 변경 감지 활성화", "info")
+
+    def _poll_watch_changes(self) -> None:
+        if self._watch_in_progress or not self._watch_root:
+            return
+        current = self._snapshot_project_files()
+        if current == self._watch_snapshot:
+            return
+        self._watch_snapshot = current
+        self._run_watch_analysis()
+
+    def _run_watch_analysis(self) -> None:
+        if not self._watch_root:
+            return
+        self._watch_in_progress = True
+        output_path = self._watch_root / "architecture.json"
+        self._set_header_status("파일 변경 감지 · 재분석 중", "busy")
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            graph = analyze_project(self._watch_root, output_path)
+        finally:
+            QApplication.restoreOverrideCursor()
+        self._load_graph(graph)
+        self._set_header_status("재분석 완료", "success")
+        self._watch_snapshot = self._snapshot_project_files()
+        self._watch_in_progress = False
+
+    def _snapshot_project_files(self) -> dict[str, float]:
+        if not self._watch_root:
+            return {}
+        ignore_dirs = {
+            ".git",
+            ".venv",
+            "__pycache__",
+            ".ddd",
+            "node_modules",
+            "dist",
+            "build",
+            "target",
+            ".idea",
+        }
+        ignore_files = {"architecture.json", ".DS_Store"}
+        snapshot: dict[str, float] = {}
+        for path in self._watch_root.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.name in ignore_files:
+                continue
+            if any(part in ignore_dirs for part in path.parts):
+                continue
+            try:
+                snapshot[str(path)] = path.stat().st_mtime
+            except OSError:
+                continue
+        return snapshot
 
     def _get_theme_colors(self) -> dict:
         from core.config import ThemeManager, Theme
