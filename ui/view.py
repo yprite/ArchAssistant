@@ -185,28 +185,24 @@ class ArchitectureView(QGraphicsView):
 
     def _init_zoom_controls(self) -> None:
         self._zoom_controls = QWidget(self.viewport())
-        self._zoom_controls.setFixedSize(120, 32)
+        self._zoom_controls.setFixedSize(132, 36)
         layout = QHBoxLayout(self._zoom_controls)
-        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(6)
         self._zoom_in = QToolButton()
         self._zoom_in.setText("+")
         self._zoom_out = QToolButton()
         self._zoom_out.setText("-")
         self._zoom_reset = QToolButton()
-        self._zoom_reset.setText("[]")
+        self._zoom_reset.setText("FIT")
         for button in (self._zoom_in, self._zoom_out, self._zoom_reset):
-            button.setFixedSize(28, 24)
+            button.setFixedSize(32, 24)
         self._zoom_in.clicked.connect(self.zoom_in)
         self._zoom_out.clicked.connect(self.zoom_out)
         layout.addWidget(self._zoom_in)
         layout.addWidget(self._zoom_out)
         layout.addWidget(self._zoom_reset)
-        self._zoom_controls.setStyleSheet(
-            "QWidget { background: rgba(255, 255, 255, 0.75); border-radius: 8px; }"
-            "QToolButton { background: transparent; border: 1px solid #D6D6D6;"
-            " border-radius: 6px; font-weight: 600; }"
-        )
+        self._zoom_controls.setStyleSheet(self._overlay_controls_qss(light=True))
         self._position_zoom_controls()
         self._init_flow_controls()
 
@@ -241,9 +237,9 @@ class ArchitectureView(QGraphicsView):
 
     def _init_flow_controls(self) -> None:
         self._flow_controls = QWidget(self.viewport())
-        self._flow_controls.setFixedSize(156, 32)
+        self._flow_controls.setFixedSize(176, 36)
         layout = QHBoxLayout(self._flow_controls)
-        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(6)
         self._flow_play = QToolButton()
         self._flow_play.setText("▶")
@@ -254,17 +250,39 @@ class ArchitectureView(QGraphicsView):
         self._flow_restart = QToolButton()
         self._flow_restart.setText("⟲")
         for button in (self._flow_play, self._flow_pause, self._flow_step, self._flow_restart):
-            button.setFixedSize(28, 24)
+            button.setFixedSize(32, 24)
         layout.addWidget(self._flow_play)
         layout.addWidget(self._flow_pause)
         layout.addWidget(self._flow_step)
         layout.addWidget(self._flow_restart)
-        self._flow_controls.setStyleSheet(
-            "QWidget { background: rgba(255, 255, 255, 0.75); border-radius: 8px; }"
-            "QToolButton { background: transparent; border: 1px solid #D6D6D6;"
-            " border-radius: 6px; font-weight: 600; }"
-        )
+        self._flow_controls.setStyleSheet(self._overlay_controls_qss(light=True))
         self._position_flow_controls()
+
+    def apply_overlay_theme(self, light: bool) -> None:
+        qss = self._overlay_controls_qss(light=light)
+        self._zoom_controls.setStyleSheet(qss)
+        self._flow_controls.setStyleSheet(qss)
+
+    def _overlay_controls_qss(self, light: bool) -> str:
+        if light:
+            return (
+                "QWidget { background: rgba(255, 255, 255, 0.82);"
+                " border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px; }"
+                "QToolButton { background: rgba(255, 255, 255, 0.9);"
+                " border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;"
+                " font-weight: 700; }"
+                "QToolButton:hover { background: rgba(230, 238, 255, 0.9);"
+                " border-color: rgba(33, 86, 216, 0.5); }"
+            )
+        return (
+            "QWidget { background: rgba(24, 30, 38, 0.86);"
+            " border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }"
+            "QToolButton { background: rgba(30, 38, 48, 0.92);"
+            " border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px;"
+            " color: #E6EDF5; font-weight: 700; }"
+            "QToolButton:hover { background: rgba(75, 124, 255, 0.25);"
+            " border-color: rgba(75, 124, 255, 0.7); }"
+        )
 
     def set_flow_controls(self, play_cb, pause_cb, step_cb, restart_cb) -> None:
         self._flow_play.clicked.connect(play_cb)

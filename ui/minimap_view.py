@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QGraphicsView,
 )
 
-from core.config import LAYER_COLORS
+from core.config import LAYER_COLORS, Theme, ThemeManager
 from ui.colors import EDGE_COLOR, STROKE_COLOR
 
 
@@ -31,15 +31,12 @@ class MinimapView(QGraphicsView):
         self.setInteractive(False)
         self.setFrameStyle(QFrame.Shape.NoFrame)
         self.setFixedSize(180, 180)
-        self.setStyleSheet(
-            "QGraphicsView { background: rgba(255, 255, 255, 0.75);"
-            " border: 1px solid rgba(0, 0, 0, 0.25); border-radius: 10px; }"
-        )
+        self._apply_style(ThemeManager.get_theme())
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(4)
-        shadow.setOffset(0, 1)
+        shadow.setBlurRadius(10)
+        shadow.setOffset(0, 3)
         shadow_color = QColor(0, 0, 0)
-        shadow_color.setAlphaF(0.15)
+        shadow_color.setAlphaF(0.18)
         shadow.setColor(shadow_color)
         self.setGraphicsEffect(shadow)
 
@@ -83,8 +80,7 @@ class MinimapView(QGraphicsView):
         self._scene.clear()
         self._viewport_rect = QGraphicsRectItem()
         self._viewport_rect.setZValue(10)
-        self._viewport_rect.setPen(QPen(QColor(74, 116, 224, 140), 1.5))
-        self._viewport_rect.setBrush(QColor(74, 116, 224, 40))
+        self._update_viewport_style()
         self._scene.addItem(self._viewport_rect)
         bounds = self._main_scene.itemsBoundingRect()
         if bounds.isNull():
@@ -101,13 +97,48 @@ class MinimapView(QGraphicsView):
         self._draw_edges()
         self._draw_nodes()
         self._token_item = QGraphicsEllipseItem(0, 0, 4, 4)
-        self._token_item.setBrush(QColor("#3B82F6"))
+        self._update_token_style()
         self._token_item.setPen(Qt.PenStyle.NoPen)
         self._token_item.setZValue(5)
         self._scene.addItem(self._token_item)
         self._static_built = True
         self._update_viewport_rect()
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def apply_theme(self, theme: Theme) -> None:
+        self._apply_style(theme)
+        self._update_viewport_style()
+        self._update_token_style()
+
+    def _apply_style(self, theme: Theme) -> None:
+        if theme == Theme.DARK:
+            self.setStyleSheet(
+                "QGraphicsView { background: rgba(24, 30, 38, 0.86);"
+                " border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; }"
+            )
+            return
+        self.setStyleSheet(
+            "QGraphicsView { background: rgba(255, 255, 255, 0.82);"
+            " border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 12px; }"
+        )
+
+    def _update_viewport_style(self) -> None:
+        if not self._viewport_rect:
+            return
+        if ThemeManager.get_theme() == Theme.DARK:
+            self._viewport_rect.setPen(QPen(QColor(75, 124, 255, 180), 1.5))
+            self._viewport_rect.setBrush(QColor(75, 124, 255, 60))
+            return
+        self._viewport_rect.setPen(QPen(QColor(33, 86, 216, 170), 1.5))
+        self._viewport_rect.setBrush(QColor(33, 86, 216, 50))
+
+    def _update_token_style(self) -> None:
+        if not self._token_item:
+            return
+        if ThemeManager.get_theme() == Theme.DARK:
+            self._token_item.setBrush(QColor("#4B7CFF"))
+            return
+        self._token_item.setBrush(QColor("#2156D8"))
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         scene_pos = self.mapToScene(event.position().toPoint())
