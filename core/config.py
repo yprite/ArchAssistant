@@ -55,26 +55,26 @@ class LayoutConfig:
     node_radius: int = 18
 
 
-# Layer colors (work with both themes)
+# Layer colors (work with both themes) - 더 구분되는 색상
 LAYER_COLORS: Dict[str, str] = {
-    "domain": "#4A74E0",
-    "application": "#6BB8A6",
-    "inbound_port": "#9A6BB8",
-    "outbound_port": "#9A6BB8",
-    "inbound_adapter": "#E39A7E",
-    "outbound_adapter": "#E39A7E",
-    "unknown": "#B5B5B5",
+    "domain": "#3B5DC9",        # 진한 파랑 (핵심)
+    "application": "#2E9E83",   # 청록색
+    "inbound_port": "#8B5CF6",  # 보라색 (인바운드)
+    "outbound_port": "#EC4899", # 분홍색 (아웃바운드)
+    "inbound_adapter": "#F59E0B",  # 주황색 (인바운드)
+    "outbound_adapter": "#EF4444", # 빨간색 (아웃바운드)
+    "unknown": "#6B7280",       # 회색
 }
 
-# Dark theme layer colors (slightly brighter for dark backgrounds)
+# Dark theme layer colors (더 밝은 톤)
 LAYER_COLORS_DARK: Dict[str, str] = {
-    "domain": "#6B8FE8",
-    "application": "#7DCBB8",
-    "inbound_port": "#B88FD0",
-    "outbound_port": "#B88FD0",
-    "inbound_adapter": "#F0B89F",
-    "outbound_adapter": "#F0B89F",
-    "unknown": "#9CA3AF",
+    "domain": "#6B8FE8",        # 밝은 파랑
+    "application": "#5EEAD4",   # 밝은 청록
+    "inbound_port": "#A78BFA",  # 밝은 보라
+    "outbound_port": "#F472B6", # 밝은 분홍
+    "inbound_adapter": "#FBBF24",  # 밝은 주황
+    "outbound_adapter": "#F87171", # 밝은 빨강
+    "unknown": "#9CA3AF",       # 밝은 회색
 }
 
 

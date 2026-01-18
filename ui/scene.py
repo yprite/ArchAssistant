@@ -148,9 +148,16 @@ class ArchitectureScene(QGraphicsScene):
         fill_item.setCacheMode(QGraphicsPathItem.CacheMode.DeviceCoordinateCache)
         self.addItem(fill_item)
 
+        # 포트 경계선: 보라색으로 경계 느낌 강조
+        port_boundary_pen = QPen(QColor(LAYER_COLORS["inbound_port"]))
+        port_boundary_pen.setWidthF(2.0)
+        port_boundary_pen.setCosmetic(True)
+        port_boundary_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        port_boundary_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+
         outer_outline = QGraphicsPolygonItem(outer)
         outer_outline.setBrush(Qt.BrushStyle.NoBrush)
-        outer_outline.setPen(self._outline_pen(1.4))
+        outer_outline.setPen(port_boundary_pen)
         outer_outline.setZValue(-90.5)
         outer_outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(outer_outline)
@@ -158,7 +165,7 @@ class ArchitectureScene(QGraphicsScene):
 
         inner_outline = QGraphicsPolygonItem(inner)
         inner_outline.setBrush(Qt.BrushStyle.NoBrush)
-        inner_outline.setPen(self._outline_pen(1.4))
+        inner_outline.setPen(port_boundary_pen)
         inner_outline.setZValue(-90.5)
         inner_outline.setCacheMode(QGraphicsPolygonItem.CacheMode.DeviceCoordinateCache)
         self._apply_hex_shadow(inner_outline)
@@ -678,9 +685,9 @@ class ArchitectureScene(QGraphicsScene):
         base = QColor(color)
         gradient = QLinearGradient(0, -radius, 0, radius)
         top = QColor(base)
-        top.setAlphaF(0.06)
+        top.setAlphaF(0.15)  # 배경 더 진하게 (0.06 → 0.15)
         bottom = QColor(base)
-        bottom.setAlphaF(0.02)
+        bottom.setAlphaF(0.06)  # 배경 더 진하게 (0.02 → 0.06)
         gradient.setColorAt(0, top)
         gradient.setColorAt(1, bottom)
         return gradient

@@ -78,19 +78,21 @@ class ComponentItem(QGraphicsObject):
         if self._invalid_position:
             # 잘못된 위치: 빨간색 테두리 + 반투명 배경
             pen_color = QColor("#EF4444")
-            fill = QColor("#EF4444")
-            fill.setAlphaF(0.3)
-            self._fill_color = fill
+            fill_brush = QColor("#EF4444")
+            fill_brush.setAlphaF(0.3)
         elif self._smell_color:
             pen_color = self._smell_color
+            fill_brush = self._fill_color
         elif self._violation_active:
             pen_color = QColor("#EF4444")
+            fill_brush = self._fill_color
         else:
             pen_color = self._stroke_color
+            fill_brush = self._fill_color
         pen = QPen(pen_color, self._current_stroke_width())
         pen.setCosmetic(True)
         painter.setPen(pen)
-        painter.setBrush(self._fill_color)
+        painter.setBrush(fill_brush)
         painter.drawRoundedRect(self._pill_rect, self._pill_height / 2, self._pill_height / 2)
         
         # LOD: 줌 레벨에 따른 텍스트 표시
@@ -302,7 +304,7 @@ class ComponentItem(QGraphicsObject):
         return QRectF(-width / 2, -height / 2, width, height)
 
     def _detect_layer_at_position(self, pos) -> str:
-        """좌표 기반으로 현재 위치의 레이어를 감지"""
+        """좌표 기반으로 현재 위치의 레이어를 감지 (관대한 경계)"""
         import math
         
         # 중심에서의 거리 계산
@@ -313,28 +315,26 @@ class ComponentItem(QGraphicsObject):
         application_radius = self.layout.application_radius
         ports_radius = self.layout.ports_radius
         adapter_radius = self.layout.adapter_radius
-        unknown_radius = self.layout.unknown_radius
         
-        # 거리 기반 레이어 판정
-        if distance <= domain_radius + 20:
+        # 관대한 마진 (50px) - 경계 근처에서 더 여유있게 판정
+        margin = 50
+        
+        # 거리 기반 레이어 판정 (간소화)
+        if distance <= domain_radius + margin:
             return "domain"
-        elif distance <= application_radius + 20:
+        elif distance <= application_radius + margin:
             return "application"
-        elif distance <= ports_radius + 20:
-            # 포트 레이어: 각도에 따라 inbound/outbound 구분
-            angle = math.degrees(math.atan2(pos.y(), pos.x()))
-            if 100 <= angle <= 180 or -180 <= angle <= -100:
-                return "inbound_port"
-            elif -80 <= angle <= 80:
-                return "outbound_port"
+        elif distance <= ports_radius + margin:
+            # 포트 레이어: inbound/outbound 통합 (어느 쪽이든 포트는 OK)
+            layer = self.component.layer
+            if layer in ("inbound_port", "outbound_port"):
+                return layer  # 현재 레이어 유지
             return "inbound_port"  # 기본값
-        elif distance <= adapter_radius + 20:
-            # 어댑터 레이어: 각도에 따라 inbound/outbound 구분
-            angle = math.degrees(math.atan2(pos.y(), pos.x()))
-            if 100 <= angle <= 180 or -180 <= angle <= -100:
-                return "inbound_adapter"
-            elif -80 <= angle <= 80:
-                return "outbound_adapter"
+        elif distance <= adapter_radius + margin:
+            # 어댑터 레이어: inbound/outbound 통합
+            layer = self.component.layer
+            if layer in ("inbound_adapter", "outbound_adapter"):
+                return layer  # 현재 레이어 유지
             return "inbound_adapter"  # 기본값
         else:
             return "unknown"
