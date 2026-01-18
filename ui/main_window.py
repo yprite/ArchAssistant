@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QColor, QPainter
+from PySide6.QtGui import QAction, QDesktopServices, QColor, QPainter, QBrush, QPixmap, QPen
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDockWidget,
+    QHBoxLayout,
     QFileDialog,
     QLabel,
     QLineEdit,
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStackedWidget,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QScrollArea,
     QWidget,
@@ -57,7 +60,7 @@ from ui.use_case_report_panel import UseCaseReportPanel
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("DDD Architecture Viewer")
+        self.setWindowTitle("DDD 아키텍처 뷰어")
         self.resize(1200, 800)
         self.setDockOptions(
             QMainWindow.DockOption.AllowTabbedDocks
@@ -76,7 +79,7 @@ class MainWindow(QMainWindow):
         self.view_stack.addWidget(self.context_view)
         self.view.setRenderHint(QPainter.Antialiasing)
         self.view.setViewportUpdateMode(self.view.ViewportUpdateMode.BoundingRectViewportUpdate)
-        self.view.setBackgroundBrush(QColor("#F5F5F7"))
+        self.view.setBackgroundBrush(self._build_grid_brush(self._get_theme_colors()))
         self.view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.view_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._central_container = QWidget()
@@ -127,54 +130,86 @@ class MainWindow(QMainWindow):
         self._building_reports = False
         self._target_spec: TargetArchitectureSpec | None = None
         self._migration_plan = None
+        self._pending_focus_component_id: str | None = None
+        self._suppress_report_focus = False
+        self._rules_done = False
+        self._smells_done = False
+        self._readiness_done = False
+        self._header_status: QLabel | None = None
+        self._header_actions_container: QWidget | None = None
+        self._header_actions_layout: QHBoxLayout | None = None
+        self._summary_report_action: QAction | None = None
+        self._apply_theme()
 
     def _init_actions(self) -> None:
-        toolbar = QToolBar("Main")
+        toolbar = QToolBar("메인")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
-        open_project_action = QAction("Open Project...", self)
+        def add_group_label(text: str) -> None:
+            label = QLabel(text)
+            label.setObjectName("toolbarGroupLabel")
+            label.setContentsMargins(6, 0, 6, 0)
+            toolbar.addWidget(label)
+
+        add_group_label("프로젝트")
+        open_project_action = QAction("프로젝트 열기...", self)
         open_project_action.triggered.connect(self._open_project)
         toolbar.addAction(open_project_action)
 
-        analyze_action = QAction("Analyze", self)
+        analyze_action = QAction("분석", self)
         analyze_action.triggered.connect(self._analyze_project)
         toolbar.addAction(analyze_action)
 
-        open_graph_action = QAction("Open Graph JSON...", self)
+        open_graph_action = QAction("그래프 JSON 열기...", self)
         open_graph_action.triggered.connect(self._open_graph)
         toolbar.addAction(open_graph_action)
 
         toolbar.addSeparator()
-        zoom_fit_action = QAction("Zoom to Fit", self)
+        add_group_label("보고서")
+        self._summary_report_action = QAction("유스케이스 종합 보고서", self)
+        self._summary_report_action.setEnabled(False)
+        self._summary_report_action.triggered.connect(self._export_use_case_summary_report)
+        toolbar.addAction(self._summary_report_action)
+
+        toolbar.addSeparator()
+        add_group_label("탐색")
+        zoom_fit_action = QAction("화면 맞춤", self)
         zoom_fit_action.triggered.connect(self._zoom_to_fit)
         toolbar.addAction(zoom_fit_action)
 
-        search_label = QLabel("Search")
+        search_label = QLabel("검색")
         search_label.setContentsMargins(12, 0, 4, 0)
         toolbar.addWidget(search_label)
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search class or package")
+        self.search_input.setPlaceholderText("클래스/패키지 검색")
         self.search_input.setFixedWidth(240)
         self.search_input.textChanged.connect(self._update_search_matches)
         self.search_input.returnPressed.connect(self._find_next_match)
         toolbar.addWidget(self.search_input)
-        search_action = QAction("Find", self)
+        search_action = QAction("찾기", self)
         search_action.triggered.connect(self._find_next_match)
         toolbar.addAction(search_action)
 
-        focus_label = QLabel("Focus")
+        focus_label = QLabel("포커스")
         focus_label.setContentsMargins(12, 0, 4, 0)
         toolbar.addWidget(focus_label)
         self.focus_box = QComboBox()
-        self.focus_box.addItems(
-            ["All", "Domain Only", "Application Only", "Ports Only", "Adapter Only"]
-        )
+        focus_options = [
+            ("전체", "all"),
+            ("도메인만", "domain"),
+            ("애플리케이션만", "application"),
+            ("포트만", "ports"),
+            ("어댑터만", "adapter"),
+        ]
+        for label, value in focus_options:
+            self.focus_box.addItem(label, value)
         self.focus_box.currentIndexChanged.connect(self._apply_layer_focus)
         toolbar.addWidget(self.focus_box)
 
         self._apply_toolbar_styles(toolbar)
         self._init_menu()
+        self._init_header_status(toolbar)
 
     def _init_docks(self) -> None:
         left_sidebar = LeftSidebar()
@@ -182,7 +217,7 @@ class MainWindow(QMainWindow):
         for box in self.filter_boxes.values():
             box.stateChanged.connect(self._update_layer_filters)
 
-        filter_dock = QDockWidget("Legend & Filters", self)
+        filter_dock = QDockWidget("범례/필터", self)
         filter_dock.setWidget(left_sidebar)
         filter_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
         filter_dock.setFeatures(
@@ -194,7 +229,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, filter_dock)
         self._left_dock = filter_dock
 
-        inspector_dock = QDockWidget("Inspector", self)
+        inspector_dock = QDockWidget("인스펙터", self)
         inspector_dock.setWidget(self._wrap_scroll(self.inspector))
         inspector_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         inspector_dock.setFeatures(
@@ -210,7 +245,7 @@ class MainWindow(QMainWindow):
 
         self.rules_panel = ArchitectureRulesPanel()
         self.rules_panel.violation_selected.connect(self._on_rule_violation_selected)
-        rules_dock = QDockWidget("Architecture Rules", self)
+        rules_dock = QDockWidget("아키텍처 규칙", self)
         rules_dock.setWidget(self._wrap_scroll(self.rules_panel))
         rules_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         rules_dock.setFeatures(
@@ -219,6 +254,7 @@ class MainWindow(QMainWindow):
         )
         rules_dock.setMinimumWidth(320)
         rules_dock.setMaximumWidth(420)
+        rules_dock.setMinimumHeight(260)
         rules_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.rules_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, rules_dock)
@@ -230,7 +266,10 @@ class MainWindow(QMainWindow):
             self.report_panel.step_selected.connect(self._on_use_case_step_selected)
         self.report_panel.export_requested.connect(self._export_use_case_report)
         self.report_panel.suggestion_selected.connect(self._on_report_suggestion_selected)
-        report_dock = QDockWidget("Use Case Report", self)
+        self.report_panel.use_case_box.currentIndexChanged.connect(
+            self._on_report_use_case_changed
+        )
+        report_dock = QDockWidget("유스케이스 리포트", self)
         report_dock.setWidget(self._wrap_scroll(self.report_panel))
         report_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         report_dock.setFeatures(
@@ -247,7 +286,7 @@ class MainWindow(QMainWindow):
 
         self.smells_panel = SmellsPanel()
         self.smells_panel.smell_selected.connect(self._on_smell_selected)
-        smells_dock = QDockWidget("DDD Smells", self)
+        smells_dock = QDockWidget("DDD 스멜", self)
         smells_dock.setWidget(self._wrap_scroll(self.smells_panel))
         smells_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         smells_dock.setFeatures(
@@ -256,6 +295,7 @@ class MainWindow(QMainWindow):
         )
         smells_dock.setMinimumWidth(320)
         smells_dock.setMaximumWidth(420)
+        smells_dock.setMinimumHeight(260)
         smells_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.smells_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, smells_dock)
@@ -264,7 +304,7 @@ class MainWindow(QMainWindow):
 
         self.readiness_panel = EventReadinessPanel()
         self.readiness_panel.use_case_selected.connect(self._on_readiness_use_case_selected)
-        readiness_dock = QDockWidget("Event-Driven Readiness", self)
+        readiness_dock = QDockWidget("이벤트 드리븐 준비도", self)
         readiness_dock.setWidget(self._wrap_scroll(self.readiness_panel))
         readiness_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         readiness_dock.setFeatures(
@@ -273,6 +313,7 @@ class MainWindow(QMainWindow):
         )
         readiness_dock.setMinimumWidth(320)
         readiness_dock.setMaximumWidth(420)
+        readiness_dock.setMinimumHeight(260)
         readiness_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.readiness_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, readiness_dock)
@@ -280,7 +321,7 @@ class MainWindow(QMainWindow):
         self._readiness_dock = readiness_dock
 
         self.context_panel = ContextMapInfoPanel()
-        context_dock = QDockWidget("Context Map Info", self)
+        context_dock = QDockWidget("컨텍스트 맵 정보", self)
         context_dock.setWidget(self._wrap_scroll(self.context_panel))
         context_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         context_dock.setFeatures(
@@ -289,6 +330,7 @@ class MainWindow(QMainWindow):
         )
         context_dock.setMinimumWidth(320)
         context_dock.setMaximumWidth(420)
+        context_dock.setMinimumHeight(240)
         context_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.context_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, context_dock)
@@ -306,7 +348,7 @@ class MainWindow(QMainWindow):
         self.migration_panel.export_csv_requested.connect(self._export_migration_csv)
         self.migration_panel.export_plain_requested.connect(self._export_migration_plain)
         self.migration_panel.item_selected.connect(self._on_migration_item_selected)
-        migration_dock = QDockWidget("Migration Planner", self)
+        migration_dock = QDockWidget("마이그레이션 플래너", self)
         migration_dock.setWidget(self._wrap_scroll(self.migration_panel))
         migration_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         migration_dock.setFeatures(
@@ -315,6 +357,7 @@ class MainWindow(QMainWindow):
         )
         migration_dock.setMinimumWidth(320)
         migration_dock.setMaximumWidth(420)
+        migration_dock.setMinimumHeight(280)
         migration_dock.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.migration_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.addDockWidget(Qt.RightDockWidgetArea, migration_dock)
@@ -324,71 +367,134 @@ class MainWindow(QMainWindow):
         self._setup_default_layout()
 
     def _init_menu(self) -> None:
-        analyze_menu = self.menuBar().addMenu("Analyze")
-        run_rules_action = QAction("Run Architecture Rule Check", self)
+        analyze_menu = self.menuBar().addMenu("분석")
+        run_rules_action = QAction("아키텍처 규칙 검사 실행", self)
         run_rules_action.triggered.connect(self._run_rule_check)
         analyze_menu.addAction(run_rules_action)
-        run_smells_action = QAction("Run DDD Smell Detector", self)
+        run_smells_action = QAction("DDD 스멜 탐지 실행", self)
         run_smells_action.triggered.connect(self._run_smell_analysis)
         analyze_menu.addAction(run_smells_action)
-        readiness_action = QAction("Event-Driven Readiness", self)
+        readiness_action = QAction("이벤트 드리븐 준비도", self)
         readiness_action.triggered.connect(self._run_event_readiness)
         analyze_menu.addAction(readiness_action)
 
-        view_menu = self.menuBar().addMenu("View")
-        hex_view_action = QAction("Hex View", self)
+        view_menu = self.menuBar().addMenu("보기")
+        hex_view_action = QAction("헥사곤 뷰", self)
         hex_view_action.triggered.connect(self._show_hex_view)
-        context_map_action = QAction("Context Map", self)
+        context_map_action = QAction("컨텍스트 맵", self)
         context_map_action.triggered.connect(self._show_context_map)
-        clear_bc_action = QAction("Clear BC Filter", self)
+        clear_bc_action = QAction("BC 필터 해제", self)
         clear_bc_action.triggered.connect(self._clear_bc_filter)
         view_menu.addAction(hex_view_action)
         view_menu.addAction(context_map_action)
         view_menu.addAction(clear_bc_action)
         view_menu.addSeparator()
-        toggle_theme_action = QAction("Toggle Dark Theme", self)
+        toggle_theme_action = QAction("다크 테마 전환", self)
         toggle_theme_action.triggered.connect(self._toggle_theme)
         view_menu.addAction(toggle_theme_action)
-        reset_layout_action = QAction("Reset Layout", self)
+        reset_layout_action = QAction("레이아웃 초기화", self)
         reset_layout_action.triggered.connect(self._setup_default_layout)
         view_menu.addAction(reset_layout_action)
 
-        file_menu = self.menuBar().addMenu("File")
-        export_md_action = QAction("Export Migration Plan (Markdown)...", self)
+        file_menu = self.menuBar().addMenu("파일")
+        export_md_action = QAction("마이그레이션 계획 내보내기 (마크다운)...", self)
         export_md_action.triggered.connect(self._export_migration_markdown)
-        export_csv_action = QAction("Export Migration Plan (CSV)...", self)
+        export_csv_action = QAction("마이그레이션 계획 내보내기 (CSV)...", self)
         export_csv_action.triggered.connect(self._export_migration_csv)
-        export_plain_action = QAction("Export Migration Plan (Plain)...", self)
+        export_plain_action = QAction("마이그레이션 계획 내보내기 (텍스트)...", self)
         export_plain_action.triggered.connect(self._export_migration_plain)
         file_menu.addAction(export_md_action)
         file_menu.addAction(export_csv_action)
         file_menu.addAction(export_plain_action)
 
+    def _init_header_status(self, toolbar: QToolBar) -> None:
+        status_container = QWidget()
+        status_layout = QHBoxLayout(status_container)
+        status_layout.setContentsMargins(8, 0, 8, 0)
+        status_layout.setSpacing(8)
+
+        self._header_status = QLabel("분석 대기")
+        self._header_status.setObjectName("toolbarStatusLabel")
+        status_layout.addWidget(self._header_status)
+
+        self._header_actions_container = QWidget()
+        self._header_actions_layout = QHBoxLayout(self._header_actions_container)
+        self._header_actions_layout.setContentsMargins(0, 0, 0, 0)
+        self._header_actions_layout.setSpacing(6)
+        status_layout.addWidget(self._header_actions_container)
+
+        toolbar.addSeparator()
+        toolbar.addWidget(status_container)
+
+    def _set_header_status(self, text: str, tone: str = "info") -> None:
+        if not self._header_status:
+            return
+        self._header_status.setText(text)
+        self._header_status.setProperty("tone", tone)
+        self._header_status.style().unpolish(self._header_status)
+        self._header_status.style().polish(self._header_status)
+        self._header_status.update()
+
+    def _reset_header_actions(self) -> None:
+        if not self._header_actions_layout:
+            return
+        while self._header_actions_layout.count():
+            item = self._header_actions_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _add_header_action(self, label: str, callback) -> None:
+        if not self._header_actions_layout:
+            return
+        button = QToolButton()
+        button.setText(label)
+        button.setObjectName("toolbarActionButton")
+        button.clicked.connect(callback)
+        self._header_actions_layout.addWidget(button)
+
     def _open_project(self) -> None:
-        directory = QFileDialog.getExistingDirectory(self, "Select Project Root")
+        directory = QFileDialog.getExistingDirectory(self, "프로젝트 루트 선택")
         if directory:
             self.project_root = Path(directory)
             self.inspector.set_base_path(self.project_root)
+            self.statusBar().showMessage(f"프로젝트 선택됨: {self.project_root.name}", 2000)
 
     def _analyze_project(self) -> None:
         if not self.project_root:
-            QMessageBox.warning(self, "Project Required", "Select a project first.")
+            QMessageBox.warning(self, "프로젝트 필요", "먼저 프로젝트를 선택하세요.")
             return
         output_path = self.project_root / "architecture.json"
-        graph = analyze_project(self.project_root, output_path)
+        self.statusBar().showMessage("분석 중...", 0)
+        self._set_header_status("분석 실행 중", "busy")
+        self._reset_header_actions()
+        self._rules_done = False
+        self._smells_done = False
+        self._readiness_done = False
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            graph = analyze_project(self.project_root, output_path)
+        finally:
+            QApplication.restoreOverrideCursor()
         self._load_graph(graph)
+        self.statusBar().showMessage("분석 완료", 2000)
+        self._update_header_status()
 
     def _open_graph(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Graph JSON", "", "JSON Files (*.json)"
+            self, "그래프 JSON 열기", "", "JSON 파일 (*.json)"
         )
         if not file_path:
             return
+        self.statusBar().showMessage("그래프 불러오는 중...", 0)
+        self._set_header_status("그래프 불러오는 중", "busy")
+        self._reset_header_actions()
         path = Path(file_path)
         self.project_root = path.parent
         self.inspector.set_base_path(self.project_root)
         graph = load_graph(path)
         self._load_graph(graph)
+        self.statusBar().showMessage("그래프 로딩 완료", 2000)
+        self._update_header_status()
 
     def _load_graph(self, graph) -> None:
         self.scene.load_graph(graph)
@@ -413,6 +519,11 @@ class MainWindow(QMainWindow):
         self._build_use_case_reports()
         self._auto_load_or_create_target_spec()
         self._setup_default_layout()
+        if self.statusBar().currentMessage() != "그래프 로딩 완료":
+            self.statusBar().showMessage("그래프 로딩 완료", 2000)
+        self._update_header_status()
+        if self._summary_report_action:
+            self._summary_report_action.setEnabled(True)
 
     def _update_layer_filters(self) -> None:
         for layer, box in self.filter_boxes.items():
@@ -425,26 +536,27 @@ class MainWindow(QMainWindow):
             or bool(outbound_port_box and outbound_port_box.isChecked())
         )
         self.scene.set_layer_visible("ports", bool(ports_visible))
+        self._restore_focus_after_filter_change()
 
     def _apply_layer_focus(self) -> None:
-        focus = self.focus_box.currentText()
-        if focus == "All":
+        focus = self.focus_box.currentData() or "all"
+        if focus == "all":
             self._set_focus_opacity({})
-            self.statusBar().showMessage("All Layers", 1500)
+            self.statusBar().showMessage("전체 레이어", 1500)
             return
 
-        if focus == "Domain Only":
+        if focus == "domain":
             self._set_focus_opacity({"domain"})
-            self.statusBar().showMessage("Domain Focus Mode", 1500)
-        elif focus == "Application Only":
+            self.statusBar().showMessage("도메인 포커스", 1500)
+        elif focus == "application":
             self._set_focus_opacity({"application"})
-            self.statusBar().showMessage("Application Focus Mode", 1500)
-        elif focus == "Ports Only":
+            self.statusBar().showMessage("애플리케이션 포커스", 1500)
+        elif focus == "ports":
             self._set_focus_opacity({"inbound_port", "outbound_port", "ports"})
-            self.statusBar().showMessage("Ports Focus Mode", 1500)
-        elif focus == "Adapter Only":
+            self.statusBar().showMessage("포트 포커스", 1500)
+        elif focus == "adapter":
             self._set_focus_opacity({"inbound_adapter", "outbound_adapter", "adapter_zone"})
-            self.statusBar().showMessage("Adapter Focus Mode", 1500)
+            self.statusBar().showMessage("어댑터 포커스", 1500)
 
     def _zoom_to_fit(self) -> None:
         rect = self.scene.graph_bounds()
@@ -469,6 +581,8 @@ class MainWindow(QMainWindow):
         self._show_component_violations(component.id)
         self._show_component_smells(component.id)
         self.inspector.report_button.setEnabled(is_use_case_entry(component))
+        if self._inspector_dock:
+            self._inspector_dock.raise_()
         bc_id = self._component_to_bc.get(component.id)
         if bc_id and self._bc_analysis:
             self.context_scene.highlight_bc(bc_id)
@@ -519,7 +633,7 @@ class MainWindow(QMainWindow):
         if not report or index < 0 or index >= len(report.flow_steps):
             return
         step = report.flow_steps[index]
-        self._focus_component(step.component_id)
+        self._soft_focus_component(step.component_id)
 
     def _export_use_case_report(self) -> None:
         if not self._use_case_reports:
@@ -529,15 +643,156 @@ class MainWindow(QMainWindow):
         if not report:
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Use Case Report", "", "Markdown (*.md)"
+            self, "유스케이스 리포트 내보내기", "", "마크다운 (*.md)"
         )
         if not path:
             return
         Path(path).write_text(self.report_panel.markdown_text.toPlainText(), encoding="utf-8")
 
+    def _export_use_case_summary_report(self) -> None:
+        if not self._use_case_reports:
+            QMessageBox.information(self, "보고서 생성", "유스케이스 분석 결과가 없습니다.")
+            return
+        default_name = "use_case_summary.md"
+        if self.project_root:
+            default_path = str(self.project_root / default_name)
+        else:
+            default_path = default_name
+        path, _ = QFileDialog.getSaveFileName(
+            self, "유스케이스 종합 보고서 저장", default_path, "마크다운 (*.md)"
+        )
+        if not path:
+            return
+        report_text = self._build_use_case_summary_markdown()
+        Path(path).write_text(report_text, encoding="utf-8")
+        self.statusBar().showMessage("유스케이스 종합 보고서를 저장했습니다.", 2000)
+
+    def _build_use_case_summary_markdown(self) -> str:
+        if not self._use_case_reports:
+            return "# 유스케이스 종합 보고서\n\n분석 결과가 없습니다."
+
+        report_lines = ["# 유스케이스 종합 보고서", ""]
+        if self.project_root:
+            report_lines.append(f"- 프로젝트: {self.project_root.name}")
+        report_lines.append(f"- 유스케이스 수: {len(self._use_case_reports.reports)}")
+        report_lines.append("")
+
+        for report in self._use_case_reports.reports.values():
+            report_lines.append(f"## {report.use_case_name}")
+            entry_layer = self._report_layer_label(report.entry_layer)
+            report_lines.append(f"- 진입: `{report.use_case_name}` ({entry_layer})")
+            report_lines.append(f"- 흐름 단계 수: {len(report.flow_steps)}")
+            report_lines.append("")
+
+            report_lines.append("### 흐름 요약")
+            report_lines.append(self._report_flow_summary_text(report.flow_steps))
+            report_lines.append("")
+
+            report_lines.append("### DDD 요약")
+            report_lines.append(self._report_ddd_summary_text(report))
+            report_lines.append("")
+
+            report_lines.append("### 이벤트 요약")
+            report_lines.append(self._report_event_summary_text(report))
+            report_lines.append("")
+
+            report_lines.append("### 컴포넌트 스멜")
+            if not report.ddd_summary.smells:
+                report_lines.append("- 없음")
+            else:
+                for smell in report.ddd_summary.smells:
+                    severity_label = self._report_severity_label(smell.severity.value)
+                    smell_label = self._report_smell_label(smell.smell_type.value)
+                    report_lines.append(
+                        f"- [{severity_label}] {smell_label}: {smell.component_name}"
+                    )
+            report_lines.append("")
+
+            report_lines.append("### 리팩터링 제안")
+            if not report.refactoring_suggestions:
+                report_lines.append("- 없음")
+            else:
+                for suggestion in report.refactoring_suggestions:
+                    report_lines.append(f"- {suggestion.title}")
+                    report_lines.append(f"  - {suggestion.description}")
+            report_lines.append("")
+
+        return "\n".join(report_lines)
+
+    def _report_flow_summary_text(self, steps: list) -> str:
+        if not steps:
+            return "-"
+        names = [step.component_name for step in steps]
+        return " → ".join(names[:6]) + (" ..." if len(names) > 6 else "")
+
+    def _report_ddd_summary_text(self, report) -> str:
+        summary = report.ddd_summary
+        return "\n".join(
+            [
+                f"헥사곤 점수: {summary.hexagon_score:.2f}",
+                f"규칙 위반: {summary.hexagon_rule_violations}",
+                f"규칙 ID: {', '.join(summary.hexagon_rule_ids) or '-'}",
+                f"빈약한 도메인: {'예' if summary.has_anemic_domain else '아니오'}",
+                f"갓 서비스: {'예' if summary.has_god_service else '아니오'}",
+                f"크로스 애그리게잇: {'예' if summary.has_cross_aggregate else '아니오'}",
+            ]
+        )
+
+    def _report_event_summary_text(self, report) -> str:
+        summary = report.event_summary
+        lines = [
+            f"준비도: {summary.readiness_score} ({self._report_readiness_label(summary.readiness_level)})",
+            f"동기 결합도: {summary.sync_coupling_strength:.2f}",
+        ]
+        for suggestion in summary.main_suggestions[:3]:
+            lines.append(f"- {suggestion.title}")
+        return "\n".join(lines)
+
+    def _report_readiness_label(self, level: str) -> str:
+        value = level.lower()
+        if value == "high":
+            return "높음"
+        if value == "medium":
+            return "중간"
+        if value == "low":
+            return "낮음"
+        return level
+
+    def _report_layer_label(self, layer: str) -> str:
+        labels = {
+            "domain": "도메인",
+            "application": "애플리케이션",
+            "inbound_port": "인바운드 포트",
+            "outbound_port": "아웃바운드 포트",
+            "inbound_adapter": "인바운드 어댑터",
+            "outbound_adapter": "아웃바운드 어댑터",
+            "unknown": "미분류",
+        }
+        return labels.get(layer, layer)
+
+    def _report_severity_label(self, severity: str) -> str:
+        value = severity.lower()
+        if value == "error":
+            return "오류"
+        if value == "warning":
+            return "경고"
+        if value == "info":
+            return "정보"
+        return severity
+
+    def _report_smell_label(self, smell_type: str) -> str:
+        labels = {
+            "anemic_domain": "빈약한 도메인",
+            "god_service": "갓 서비스",
+            "repository_leak": "레포지토리 누수",
+            "cross_aggregate_coupling": "크로스 애그리게잇",
+        }
+        return labels.get(smell_type, smell_type)
+
     def _run_rule_check(self) -> None:
         if not self._current_graph:
             return
+        self._set_header_status("규칙 분석 중", "busy")
         violations, summary = run_rule_analysis(self._current_graph)
         self._violations = violations
         self.rules_panel.show_results(summary, violations)
@@ -554,10 +809,13 @@ class MainWindow(QMainWindow):
         if self.scene.active_component_id:
             self._show_component_violations(self.scene.active_component_id)
         self._build_use_case_reports()
+        self._rules_done = True
+        self._update_header_status()
 
     def _run_smell_analysis(self) -> None:
         if not self._current_graph:
             return
+        self._set_header_status("스멜 분석 중", "busy")
         components = {component.id: component for component in self._current_graph.components}
         metrics = ComponentMetricsProvider(components)
         summary = analyze_project_smells(self._current_graph, metrics)
@@ -569,6 +827,8 @@ class MainWindow(QMainWindow):
         if self.scene.active_component_id:
             self._show_component_smells(self.scene.active_component_id)
         self._build_use_case_reports()
+        self._smells_done = True
+        self._update_header_status()
 
     def _run_bounded_context_analysis(self) -> None:
         if not self._current_graph:
@@ -603,7 +863,9 @@ class MainWindow(QMainWindow):
                 self._event_readiness,
                 self._bc_analysis,
             )
+            self._suppress_report_focus = True
             self.report_panel.set_reports(self._use_case_reports)
+            self._suppress_report_focus = False
         finally:
             self._building_reports = False
 
@@ -612,7 +874,7 @@ class MainWindow(QMainWindow):
 
     def _load_target_spec_override(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Override Target Architecture", "", "JSON Files (*.json)"
+            self, "타깃 아키텍처 재지정", "", "JSON 파일 (*.json)"
         )
         if not path:
             return
@@ -644,16 +906,16 @@ class MainWindow(QMainWindow):
             event_readiness=self._event_readiness,
             bc_result=self._bc_analysis,
             use_case_reports=self._use_case_reports,
-            current_project_name=str(self.project_root) if self.project_root else "Current",
+            current_project_name=str(self.project_root) if self.project_root else "현재 프로젝트",
         )
         self.migration_panel.set_plan(self._migration_plan)
-        self.migration_panel.set_status("Migration plan refreshed.")
+        self.migration_panel.set_status("마이그레이션 계획이 새로고침되었습니다.")
 
     def _export_migration_markdown(self) -> None:
         if not self._migration_plan:
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Migration Plan (Markdown)", "", "Markdown (*.md)"
+            self, "마이그레이션 계획 내보내기 (마크다운)", "", "마크다운 (*.md)"
         )
         if not path:
             return
@@ -663,7 +925,7 @@ class MainWindow(QMainWindow):
         if not self._migration_plan:
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Migration Plan (CSV)", "", "CSV (*.csv)"
+            self, "마이그레이션 계획 내보내기 (CSV)", "", "CSV (*.csv)"
         )
         if not path:
             return
@@ -673,7 +935,7 @@ class MainWindow(QMainWindow):
         if not self._migration_plan:
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Migration Plan (Plain)", "", "Text (*.txt)"
+            self, "마이그레이션 계획 내보내기 (텍스트)", "", "텍스트 (*.txt)"
         )
         if not path:
             return
@@ -717,7 +979,7 @@ class MainWindow(QMainWindow):
             self._load_target_spec_from_path(target_path)
             self._save_target_settings(target_path)
             self.migration_panel.set_status(
-                f"Target loaded from {target_path.name}"
+                f"{target_path.name}에서 타깃을 불러왔습니다."
             )
             self._rebuild_migration_plan()
             return
@@ -727,7 +989,7 @@ class MainWindow(QMainWindow):
         self._load_target_spec_from_path(target_path)
         self._save_target_settings(target_path)
         self.migration_panel.set_status(
-            "Target auto-generated from current analysis."
+            "현재 분석 결과로 타깃이 자동 생성되었습니다."
         )
         self._rebuild_migration_plan()
 
@@ -755,7 +1017,7 @@ class MainWindow(QMainWindow):
                         "inbound_adapter",
                         "outbound_adapter",
                     ],
-                    "notes": "Auto-generated from current analysis",
+                    "notes": "현재 분석 결과로 자동 생성됨",
                 }
             )
 
@@ -779,7 +1041,7 @@ class MainWindow(QMainWindow):
             )
 
         data = {
-            "name": "Auto Generated Target",
+            "name": "자동 생성 타깃",
             "boundedContexts": bounded_contexts,
             "useCaseBlueprints": use_cases,
             "moduleGuidelines": {
@@ -813,6 +1075,8 @@ class MainWindow(QMainWindow):
             return
         self.context_panel.show_context(context)
         self.scene.set_bc_filter(set(context.component_ids))
+        if self._context_dock:
+            self._context_dock.raise_()
 
     def _show_hex_view(self) -> None:
         self.view_stack.setCurrentWidget(self.view)
@@ -847,21 +1111,32 @@ class MainWindow(QMainWindow):
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._inspector_dock)
             self._inspector_dock.show()
 
-        right_docks = [
-            self._rules_dock,
-            self._report_dock,
+        if self._inspector_dock and self._rules_dock:
+            self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._rules_dock)
+            self.splitDockWidget(self._inspector_dock, self._rules_dock, Qt.Orientation.Vertical)
+
+        if self._report_dock and self._inspector_dock:
+            self.tabifyDockWidget(self._inspector_dock, self._report_dock)
+
+        analysis_docks = [
             self._smells_dock,
             self._readiness_dock,
             self._context_dock,
             self._migration_dock,
         ]
-        for dock in right_docks:
-            if dock and self._inspector_dock:
-                self.tabifyDockWidget(self._inspector_dock, dock)
+        for dock in analysis_docks:
+            if dock and self._rules_dock:
+                self.tabifyDockWidget(self._rules_dock, dock)
 
         if self._left_dock and self._inspector_dock:
             self.resizeDocks([self._left_dock], [260], Qt.Orientation.Horizontal)
             self.resizeDocks([self._inspector_dock], [360], Qt.Orientation.Horizontal)
+        if self._inspector_dock and self._rules_dock:
+            self.resizeDocks(
+                [self._inspector_dock, self._rules_dock],
+                [420, 320],
+                Qt.Orientation.Vertical,
+            )
         if self._inspector_dock:
             self._inspector_dock.raise_()
 
@@ -870,8 +1145,20 @@ class MainWindow(QMainWindow):
         if not smells:
             self.inspector.clear_component_smells()
             return
+        severity_labels = {
+            "info": "정보",
+            "warning": "경고",
+            "error": "오류",
+        }
+        smell_labels = {
+            "anemic_domain": "빈약한 도메인",
+            "god_service": "갓 서비스",
+            "repository_leak": "레포지토리 누수",
+            "cross_aggregate_coupling": "크로스 애그리게잇",
+        }
         items = [
-            f"[{smell.severity.value}] {smell.smell_type.value}: {smell.description}"
+            f"[{severity_labels.get(smell.severity.value, smell.severity.value)}] "
+            f"{smell_labels.get(smell.smell_type.value, smell.smell_type.value)}: {smell.description}"
             for smell in smells
         ]
         self.inspector.show_component_smells(items)
@@ -892,6 +1179,8 @@ class MainWindow(QMainWindow):
         color = QColor(SMELL_COLORS.get(smell_color_key(smell.smell_type), "#EF4444"))
         self.scene.focus_on_smell(smell.component_id, color)
         self._focus_component(smell.component_id)
+        if self._smells_dock:
+            self._smells_dock.raise_()
 
     def _on_report_suggestion_selected(self, component_ids: list) -> None:
         if not component_ids:
@@ -901,6 +1190,7 @@ class MainWindow(QMainWindow):
     def _run_event_readiness(self) -> None:
         if not self._current_graph:
             return
+        self._set_header_status("이벤트 준비도 분석 중", "busy")
         self._event_readiness = analyze_project_event_readiness(
             self._current_graph, self._violations_by_component
         )
@@ -908,11 +1198,13 @@ class MainWindow(QMainWindow):
         if self._readiness_dock:
             self._readiness_dock.raise_()
         self._build_use_case_reports()
+        self._readiness_done = True
+        self._update_header_status()
 
     def _on_readiness_use_case_selected(self, component_id: str) -> None:
         if not self._current_graph:
             return
-        self._focus_component(component_id)
+        self._soft_focus_component(component_id)
         flow = compute_flow_path(self._current_graph, component_id)
         if flow.nodes:
             self.scene.apply_flow(flow, component_id)
@@ -937,6 +1229,9 @@ class MainWindow(QMainWindow):
             point = edge.path().pointAtPercent(0.5)
             self.view.centerOn(point)
         self._show_component_violations(violation.source_component_id)
+        if self._rules_dock:
+            self._rules_dock.raise_()
+        self._soft_focus_component(violation.source_component_id, center=False)
 
     def _on_component_violation_clicked(self, item) -> None:
         component = self.inspector.current_component()
@@ -953,7 +1248,15 @@ class MainWindow(QMainWindow):
             self.inspector.clear_component_violations()
             return
         violations = self._violations_by_component.get(component_id, [])
-        items = [f"[{v.severity.upper()}] {v.rule_id}: {v.message}" for v in violations]
+        severity_labels = {
+            "info": "정보",
+            "warning": "경고",
+            "error": "오류",
+        }
+        items = [
+            f"[{severity_labels.get(v.severity, v.severity)}] {v.rule_id}: {v.message}"
+            for v in violations
+        ]
         self.inspector.show_component_violations(items)
 
     def _show_flow_from_inspector(self) -> None:
@@ -973,13 +1276,13 @@ class MainWindow(QMainWindow):
 
     def _flow_step_labels(self, flow) -> list[str]:
         labels = {
-            "domain": "Domain",
-            "application": "App",
-            "inbound_port": "InPort",
-            "outbound_port": "OutPort",
-            "inbound_adapter": "InAdp",
-            "outbound_adapter": "OutAdp",
-            "unknown": "Unknown",
+            "domain": "도메인",
+            "application": "앱",
+            "inbound_port": "인포트",
+            "outbound_port": "아웃포트",
+            "inbound_adapter": "인어댑터",
+            "outbound_adapter": "아웃어댑터",
+            "unknown": "미분류",
         }
         steps = []
         for idx in range(len(flow.nodes) - 1):
@@ -1066,6 +1369,39 @@ class MainWindow(QMainWindow):
             )
         return steps
 
+    def _update_header_status(self) -> None:
+        if not self._current_graph:
+            self._set_header_status("분석 대기", "idle")
+            self._reset_header_actions()
+            return
+        states = []
+        if self._rules_done:
+            states.append("규칙 ✓")
+        if self._smells_done:
+            states.append("스멜 ✓")
+        if self._readiness_done:
+            states.append("이벤트 ✓")
+        if states:
+            self._set_header_status("분석 완료 · " + " / ".join(states), "success")
+            self._reset_header_actions()
+            self._add_header_action("규칙 보기", self._show_rules_panel)
+            self._add_header_action("스멜 보기", self._show_smells_panel)
+            self._add_header_action("이벤트 보기", self._show_readiness_panel)
+        else:
+            self._set_header_status("그래프 로딩 완료", "info")
+
+    def _show_rules_panel(self) -> None:
+        if self._rules_dock:
+            self._rules_dock.raise_()
+
+    def _show_smells_panel(self) -> None:
+        if self._smells_dock:
+            self._smells_dock.raise_()
+
+    def _show_readiness_panel(self) -> None:
+        if self._readiness_dock:
+            self._readiness_dock.raise_()
+
     def _set_focus_opacity(self, focus_layers: set[str]) -> None:
         dim_opacity = 0.2
         layers = [
@@ -1115,46 +1451,194 @@ class MainWindow(QMainWindow):
         rect = item.sceneBoundingRect().adjusted(-160, -160, 160, 160)
         self.view.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
 
+    def _soft_focus_component(self, component_id: str, center: bool = True) -> None:
+        item = self.scene.component_items.get(component_id)
+        if not item:
+            return
+        self.scene.set_active_component(component_id)
+        self.inspector.show_component(item.component)
+        item.flash(2)
+        if center:
+            self.view.centerOn(item)
+
+    def _on_report_use_case_changed(self, index: int) -> None:
+        if self._suppress_report_focus or not self._use_case_reports:
+            return
+        use_case_id = self.report_panel.use_case_box.itemData(index)
+        if use_case_id:
+            self._soft_focus_component(use_case_id)
+            if self._report_dock:
+                self._report_dock.raise_()
+
+    def _restore_focus_after_filter_change(self) -> None:
+        active_id = self.scene.active_component_id
+        candidate_id = active_id or self._pending_focus_component_id
+        if not candidate_id:
+            return
+        item = self.scene.component_items.get(candidate_id)
+        if not item:
+            return
+        layer_key = item.component.layer
+        layer_box = self.filter_boxes.get(layer_key)
+        ports_visible = bool(
+            (self.filter_boxes.get("inbound_port") and self.filter_boxes["inbound_port"].isChecked())
+            or (self.filter_boxes.get("outbound_port") and self.filter_boxes["outbound_port"].isChecked())
+        )
+        if layer_key in {"inbound_port", "outbound_port"} and not ports_visible:
+            self._pending_focus_component_id = candidate_id
+            self.statusBar().showMessage("선택한 포트가 필터로 숨겨졌습니다.", 2000)
+            return
+        if layer_box and not layer_box.isChecked():
+            self._pending_focus_component_id = candidate_id
+            self.statusBar().showMessage("선택한 컴포넌트가 필터로 숨겨졌습니다.", 2000)
+            return
+        if self._pending_focus_component_id:
+            self._soft_focus_component(self._pending_focus_component_id)
+            self._pending_focus_component_id = None
+
     def _apply_toolbar_styles(self, toolbar: QToolBar) -> None:
         colors = self._get_theme_colors()
         toolbar.setStyleSheet(
-            f"QToolBar {{ spacing: 8px; padding: 6px; background: {colors['surface']}; }}"
-            f"QLineEdit {{ padding: 6px 10px; border-radius: 10px;"
-            f" border: 1px solid {colors['border']}; background: {colors['surface']}; color: {colors['text']}; }}"
-            f"QComboBox {{ padding: 6px 8px; border-radius: 10px;"
-            f" border: 1px solid {colors['border']}; background: {colors['surface']}; color: {colors['text']}; }}"
-            "QToolButton { padding: 6px 10px; border-radius: 8px; }"
+            f"""
+            QToolBar {{
+                spacing: 10px;
+                padding: 8px;
+                background: {colors['surface']};
+                border-bottom: 1px solid {colors['border']};
+            }}
+            QLineEdit {{
+                padding: 7px 10px;
+                border-radius: 10px;
+                border: 1px solid {colors['border']};
+                background: {colors['surface']};
+                color: {colors['text']};
+            }}
+            QLineEdit:focus {{
+                border-color: {colors['accent']};
+            }}
+            QComboBox {{
+                padding: 7px 10px;
+                border-radius: 10px;
+                border: 1px solid {colors['border']};
+                background: {colors['surface']};
+                color: {colors['text']};
+            }}
+            QComboBox:focus {{
+                border-color: {colors['accent']};
+            }}
+            QToolButton {{
+                padding: 7px 12px;
+                border-radius: 10px;
+                background: {colors['surface_alt']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+            }}
+            QToolButton:hover {{
+                background: {colors['accent_soft']};
+                border-color: {colors['accent']};
+            }}
+            QLabel#toolbarGroupLabel {{
+                color: {colors['text_muted']};
+                font-size: 11px;
+                font-weight: 600;
+                padding: 0 4px;
+            }}
+            QLabel#toolbarStatusLabel {{
+                padding: 4px 10px;
+                border-radius: 10px;
+                background: {colors['surface_alt']};
+                color: {colors['text']};
+                font-weight: 600;
+            }}
+            QLabel#toolbarStatusLabel[tone="busy"] {{
+                background: {colors['accent_soft']};
+                color: {colors['text']};
+            }}
+            QLabel#toolbarStatusLabel[tone="success"] {{
+                background: {colors['accent_soft']};
+                color: {colors['text']};
+            }}
+            QLabel#toolbarStatusLabel[tone="idle"] {{
+                background: {colors['surface_alt']};
+                color: {colors['text_muted']};
+            }}
+            QToolButton#toolbarActionButton {{
+                padding: 6px 10px;
+                border-radius: 10px;
+                background: {colors['surface']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+            }}
+            QToolButton#toolbarActionButton:hover {{
+                background: {colors['accent_soft']};
+                border-color: {colors['accent']};
+            }}
+            """
         )
 
     def _get_theme_colors(self) -> dict:
         from core.config import ThemeManager, Theme
         if ThemeManager.get_theme() == Theme.DARK:
             return {
-                'background': '#1E1E2E',
-                'surface': '#2D2D3D',
-                'border': '#4A4A5A',
-                'text': '#E4E4E7',
+                "background": "#12161C",
+                "surface": "#1B222B",
+                "surface_alt": "#232C37",
+                "border": "#2B3642",
+                "text": "#E6EDF5",
+                "text_muted": "#A7B2C1",
+                "accent": "#4B7CFF",
+                "accent_soft": "#203358",
+                "grid": "#1F2731",
+                "grid_bold": "#2A3642",
             }
         return {
-            'background': '#F5F5F7',
-            'surface': '#FFFFFF',
-            'border': '#D8D8D8',
-            'text': '#2F2F2F',
+            "background": "#F2F4F6",
+            "surface": "#FFFFFF",
+            "surface_alt": "#F7F9FB",
+            "border": "#D5DADF",
+            "text": "#1F2937",
+            "text_muted": "#556070",
+            "accent": "#2156D8",
+            "accent_soft": "#E6EEFF",
+            "grid": "#E3E8EE",
+            "grid_bold": "#D3DAE3",
         }
+
+    def _build_grid_brush(self, colors: dict) -> QBrush:
+        size = 64
+        pixmap = QPixmap(size, size)
+        pixmap.fill(QColor(colors["background"]))
+        painter = QPainter(pixmap)
+        painter.setPen(QPen(QColor(colors["grid"]), 1))
+        step = 8
+        for x in range(0, size, step):
+            painter.drawLine(x, 0, x, size)
+        for y in range(0, size, step):
+            painter.drawLine(0, y, size, y)
+        painter.setPen(QPen(QColor(colors["grid_bold"]), 1))
+        for x in range(0, size, step * 4):
+            painter.drawLine(x, 0, x, size)
+        for y in range(0, size, step * 4):
+            painter.drawLine(0, y, size, y)
+        painter.end()
+        return QBrush(pixmap)
 
     def _toggle_theme(self) -> None:
         from core.config import ThemeManager, Theme
         new_theme = ThemeManager.toggle_theme()
         self._apply_theme()
-        theme_name = "Dark" if new_theme == Theme.DARK else "Light"
-        self.statusBar().showMessage(f"Switched to {theme_name} Theme", 2000)
+        theme_name = "다크" if new_theme == Theme.DARK else "라이트"
+        self.statusBar().showMessage(f"{theme_name} 테마로 전환했습니다.", 2000)
 
     def _apply_theme(self) -> None:
         from core.config import ThemeManager, Theme
         colors = self._get_theme_colors()
         
         # 배경색 변경
-        self.view.setBackgroundBrush(QColor(colors['background']))
+        self.view.setBackgroundBrush(self._build_grid_brush(colors))
+        self.view.apply_overlay_theme(ThemeManager.get_theme() == Theme.LIGHT)
+        if self.minimap:
+            self.minimap.apply_theme(ThemeManager.get_theme())
         
         # 툴바 스타일 업데이트
         for toolbar in self.findChildren(QToolBar):
@@ -1163,28 +1647,92 @@ class MainWindow(QMainWindow):
         # 메인 윈도우 스타일시트
         self.setStyleSheet(f"""
             QMainWindow {{ background: {colors['background']}; }}
-            QDockWidget {{ 
-                background: {colors['surface']}; 
+            QDockWidget {{
+                background: {colors['surface']};
                 color: {colors['text']};
+                border: 1px solid {colors['border']};
+                border-radius: 10px;
                 titlebar-close-icon: url(none);
             }}
             QDockWidget::title {{
                 background: {colors['surface']};
-                padding: 8px;
+                padding: 10px 12px;
+                font-family: 'Gmarket Sans';
+                font-weight: 700;
+                border-bottom: 1px solid {colors['border']};
             }}
-            QMenuBar {{ 
-                background: {colors['surface']}; 
+            QDockWidget QWidget {{
+                background: {colors['surface']};
                 color: {colors['text']};
             }}
-            QMenuBar::item:selected {{ background: {colors['border']}; }}
-            QMenu {{ 
-                background: {colors['surface']}; 
+            QScrollArea {{
+                border: none;
+                background: {colors['surface']};
+            }}
+            QGroupBox {{
+                border: 1px solid {colors['border']};
+                border-radius: 10px;
+                margin-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 6px;
+                color: {colors['text_muted']};
+            }}
+            QMenuBar {{
+                background: {colors['surface']};
                 color: {colors['text']};
             }}
-            QMenu::item:selected {{ background: {colors['border']}; }}
-            QStatusBar {{ 
-                background: {colors['surface']}; 
+            QMenuBar::item:selected {{ background: {colors['accent_soft']}; }}
+            QMenu {{
+                background: {colors['surface']};
                 color: {colors['text']};
+                border: 1px solid {colors['border']};
+            }}
+            QMenu::item:selected {{ background: {colors['accent_soft']}; }}
+            QStatusBar {{
+                background: {colors['surface']};
+                color: {colors['text_muted']};
+            }}
+            QListWidget, QTableWidget, QTextEdit, QTreeWidget {{
+                background: {colors['surface_alt']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+            }}
+            QTableWidget {{
+                gridline-color: {colors['border']};
+                alternate-background-color: {colors['surface']};
+            }}
+            QTableWidget::item, QListWidget::item, QTreeWidget::item {{
+                padding: 6px 8px;
+            }}
+            QTableWidget::item:selected, QListWidget::item:selected, QTreeWidget::item:selected {{
+                background: {colors['accent_soft']};
+                color: {colors['text']};
+            }}
+            QHeaderView::section {{
+                background: {colors['surface']};
+                color: {colors['text_muted']};
+                border: 1px solid {colors['border']};
+                padding: 6px 8px;
+                font-weight: 600;
+            }}
+            QPushButton {{
+                background: {colors['accent']};
+                color: white;
+                border-radius: 8px;
+                padding: 7px 12px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {colors['accent']};
+                opacity: 0.9;
+            }}
+            QPushButton:disabled {{
+                background: {colors['border']};
+                color: {colors['text_muted']};
             }}
         """)
 
@@ -1193,24 +1741,26 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
         
         dialog = QDialog(self)
-        dialog.setWindowTitle("Welcome to DDD Architecture Viewer")
+        dialog.setWindowTitle("DDD Architecture Viewer 시작하기")
         dialog.setMinimumSize(500, 400)
         
         layout = QVBoxLayout(dialog)
         layout.setSpacing(16)
         
         # Welcome header
-        header = QLabel("🏗️ Welcome to DDD Architecture Viewer!")
-        header.setStyleSheet("font-size: 20px; font-weight: bold; padding: 16px;")
+        header = QLabel("🏗️ DDD Architecture Viewer에 오신 것을 환영합니다!")
+        header.setStyleSheet(
+            "font-family: 'Gmarket Sans'; font-size: 20px; font-weight: bold; padding: 16px;"
+        )
         layout.addWidget(header)
         
         # Tips
         tips = [
-            "📂 <b>Open a Project</b>: Click 'Open Project...' to select your Java/Spring project",
-            "🔍 <b>Analyze</b>: Click 'Analyze' to scan and visualize your architecture",
-            "🖱️ <b>Navigate</b>: Scroll to zoom, right-click drag to pan, drag nodes to rearrange",
-            "🎯 <b>Focus</b>: Click on components to see details in the Inspector panel",
-            "🌙 <b>Dark Mode</b>: View → Toggle Dark Theme for dark mode",
+            "📂 <b>프로젝트 열기</b>: '프로젝트 열기...'를 눌러 Java/Spring 프로젝트를 선택합니다.",
+            "🔍 <b>분석</b>: '분석'을 눌러 아키텍처를 스캔하고 시각화합니다.",
+            "🖱️ <b>탐색</b>: 스크롤로 줌, 우클릭 드래그로 패닝, 노드 드래그로 재배치합니다.",
+            "🎯 <b>포커스</b>: 컴포넌트를 클릭하면 인스펙터에서 상세를 확인할 수 있습니다.",
+            "🌙 <b>다크 모드</b>: 보기 → 다크 테마 전환에서 변경합니다.",
         ]
         
         for tip in tips:
@@ -1225,7 +1775,7 @@ class MainWindow(QMainWindow):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        close_btn = QPushButton("Get Started!")
+        close_btn = QPushButton("시작하기")
         close_btn.setStyleSheet("""
             QPushButton {
                 background: #4A74E0;
@@ -1254,4 +1804,3 @@ class MainWindow(QMainWindow):
             if not self._current_graph:
                 from PySide6.QtCore import QTimer
                 QTimer.singleShot(500, self._show_onboarding)
-
