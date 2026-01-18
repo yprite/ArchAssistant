@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, Signal, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
-from PySide6.QtWidgets import QGraphicsDropShadowEffect, QGraphicsObject
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QBrush
+from PySide6.QtWidgets import QGraphicsObject
 
 from analyzer.model import Component
 from core.config import LAYER_COLORS, LayoutConfig
@@ -38,25 +38,42 @@ class ComponentItem(QGraphicsObject):
         self._violation_active = False
         self._smell_color: QColor | None = None
         self._flash_animation: QPropertyAnimation | None = None
+        self._glow_intensity: float = 0.0
+        self._is_dragging = False
+        self._drag_start_pos = None
         self.setToolTip(self._build_tooltip())
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemIsMovable, True)  # 드래그 가능
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemSendsScenePositionChanges, True)
         self.setFlag(QGraphicsObject.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
         self.setAcceptHoverEvents(True)
         self.setCacheMode(QGraphicsObject.CacheMode.DeviceCoordinateCache)
-        self._shadow = QGraphicsDropShadowEffect()
-        self._shadow.setBlurRadius(8)
-        self._shadow.setOffset(0, 2)
-        shadow_color = QColor(0, 0, 0)
-        shadow_color.setAlphaF(0.06)
-        self._shadow.setColor(shadow_color)
-        self.setGraphicsEffect(self._shadow)
 
     def boundingRect(self) -> QRectF:
         return QRectF(self._pill_rect)
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # type: ignore[override]
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        zoom = painter.worldTransform().m11()
+        
+        # 정적 섀도우 그리기 (GPU 부하 감소)
+        if zoom > 0.3:
+            shadow_offset = 2 if not self._is_hovered else 3
+            shadow_rect = self._pill_rect.adjusted(1, shadow_offset, 1, shadow_offset)
+            shadow_alpha = 25 if self._is_hovered else 15
+            if self._glow_intensity > 0:
+                glow_color = QColor(self.color)
+                glow_color.setAlpha(int(60 * self._glow_intensity))
+                glow_rect = self._pill_rect.adjusted(-3, -3, 3, 3)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(glow_color)
+                painter.drawRoundedRect(glow_rect, self._pill_height / 2 + 3, self._pill_height / 2 + 3)
+            shadow_color = QColor(0, 0, 0, shadow_alpha)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(shadow_color)
+            painter.drawRoundedRect(shadow_rect, self._pill_height / 2, self._pill_height / 2)
+        
+        # 노드 본체 그리기
         if self._smell_color:
             pen_color = self._smell_color
         elif self._violation_active:
@@ -68,20 +85,56 @@ class ComponentItem(QGraphicsObject):
         painter.setPen(pen)
         painter.setBrush(self._fill_color)
         painter.drawRoundedRect(self._pill_rect, self._pill_height / 2, self._pill_height / 2)
-        if painter.worldTransform().m11() > 0.35:
+        
+        # LOD: 줌 레벨에 따른 텍스트 표시
+        if zoom > 0.5:
             text_color = QColor("#FFFFFF") if (self._in_flow or self._flow_active) else TEXT_PRIMARY
             painter.setPen(QPen(text_color))
             painter.setFont(self._label_font())
             painter.drawText(self._pill_rect, Qt.AlignmentFlag.AlignCenter, self._display_text)
+        elif zoom > 0.25:
+            # 축소 시: 간소화된 라벨 (첫 글자만)
+            text_color = QColor("#FFFFFF") if (self._in_flow or self._flow_active) else TEXT_PRIMARY
+            painter.setPen(QPen(text_color))
+            font = self._label_font()
+            font.setPointSize(9)
+            painter.setFont(font)
+            short_label = self._label_text[0] if self._label_text else ""
+            painter.drawText(self._pill_rect, Qt.AlignmentFlag.AlignCenter, short_label)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._is_dragging = False
+            self._drag_start_pos = event.pos()
+            # 클릭 피드백: 살짝 스케일 다운
+            self.setScale(0.96)
         self.clicked.emit(self.component)
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
+        if self._drag_start_pos is not None:
+            # 드래그 감지: 약간의 이동이 있으면 드래그로 판정
+            delta = event.pos() - self._drag_start_pos
+            if delta.manhattanLength() > 5:
+                self._is_dragging = True
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = None
+            # 스케일 복원
+            self.setScale(1.04 if self._is_hovered else 1.0)
+            if self._is_dragging:
+                self._is_dragging = False
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().mouseReleaseEvent(event)
 
     def hoverEnterEvent(self, event) -> None:  # type: ignore[override]
         self._is_hovered = True
         self._update_glow(True)
         self.setScale(1.04)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)  # 드래그 가능 표시
         self.update()
         self.hovered.emit(self.component, True)
         super().hoverEnterEvent(event)
@@ -90,6 +143,7 @@ class ComponentItem(QGraphicsObject):
         self._is_hovered = False
         self._update_glow(False)
         self.setScale(1.0)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
         self.update()
         self.hovered.emit(self.component, False)
         super().hoverLeaveEvent(event)
@@ -128,28 +182,22 @@ class ComponentItem(QGraphicsObject):
         if active:
             self._fill_color = QColor(FLOW_ACTIVE)
             self._fill_color.setAlphaF(0.95)
-            glow = QColor(FLOW_ACTIVE)
-            glow.setAlphaF(0.7)
-            self._shadow.setBlurRadius(18)
-            self._shadow.setColor(glow)
+            self._glow_intensity = 1.0  # 글로우 효과
             self.setScale(1.06)
         elif self._flow_visited:
             self._fill_color = QColor(FLOW_VISITED)
             self._fill_color.setAlphaF(0.85)
-            self._shadow.setBlurRadius(10)
-            self._shadow.setColor(QColor(0, 0, 0, 15))
+            self._glow_intensity = 0.5
             self.setScale(1.0)
         elif self._in_flow:
             self._fill_color = QColor(FLOW_IN)
             self._fill_color.setAlphaF(0.7)
-            self._shadow.setBlurRadius(8)
-            self._shadow.setColor(QColor(0, 0, 0, 10))
+            self._glow_intensity = 0.3
             self.setScale(1.0)
         else:
             self._fill_color = QColor(self.color).darker(110)
             self._fill_color.setAlphaF(0.26)
-            self._shadow.setBlurRadius(8)
-            self._shadow.setColor(QColor(0, 0, 0, 15))
+            self._glow_intensity = 0.0
             self.setScale(1.0)
         self.update()
 
@@ -189,11 +237,8 @@ class ComponentItem(QGraphicsObject):
         self._flash_animation = animation
 
     def _update_glow(self, hovered: bool) -> None:
-        blur = 14 if hovered else 8
-        color = QColor(0, 0, 0)
-        color.setAlphaF(0.1 if hovered else 0.06)
-        self._shadow.setBlurRadius(blur)
-        self._shadow.setColor(color)
+        self._glow_intensity = 1.0 if hovered else 0.0
+        self.update()
 
     def _current_stroke_width(self) -> float:
         if self._is_active:

@@ -345,6 +345,10 @@ class MainWindow(QMainWindow):
         view_menu.addAction(hex_view_action)
         view_menu.addAction(context_map_action)
         view_menu.addAction(clear_bc_action)
+        view_menu.addSeparator()
+        toggle_theme_action = QAction("Toggle Dark Theme", self)
+        toggle_theme_action.triggered.connect(self._toggle_theme)
+        view_menu.addAction(toggle_theme_action)
         reset_layout_action = QAction("Reset Layout", self)
         reset_layout_action.triggered.connect(self._setup_default_layout)
         view_menu.addAction(reset_layout_action)
@@ -1112,11 +1116,142 @@ class MainWindow(QMainWindow):
         self.view.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
 
     def _apply_toolbar_styles(self, toolbar: QToolBar) -> None:
+        colors = self._get_theme_colors()
         toolbar.setStyleSheet(
-            "QToolBar { spacing: 8px; padding: 6px; }"
-            "QLineEdit { padding: 6px 10px; border-radius: 10px;"
-            " border: 1px solid #D8D8D8; background: #FFFFFF; }"
-            "QComboBox { padding: 6px 8px; border-radius: 10px;"
-            " border: 1px solid #D8D8D8; background: #FFFFFF; }"
+            f"QToolBar {{ spacing: 8px; padding: 6px; background: {colors['surface']}; }}"
+            f"QLineEdit {{ padding: 6px 10px; border-radius: 10px;"
+            f" border: 1px solid {colors['border']}; background: {colors['surface']}; color: {colors['text']}; }}"
+            f"QComboBox {{ padding: 6px 8px; border-radius: 10px;"
+            f" border: 1px solid {colors['border']}; background: {colors['surface']}; color: {colors['text']}; }}"
             "QToolButton { padding: 6px 10px; border-radius: 8px; }"
         )
+
+    def _get_theme_colors(self) -> dict:
+        from core.config import ThemeManager, Theme
+        if ThemeManager.get_theme() == Theme.DARK:
+            return {
+                'background': '#1E1E2E',
+                'surface': '#2D2D3D',
+                'border': '#4A4A5A',
+                'text': '#E4E4E7',
+            }
+        return {
+            'background': '#F5F5F7',
+            'surface': '#FFFFFF',
+            'border': '#D8D8D8',
+            'text': '#2F2F2F',
+        }
+
+    def _toggle_theme(self) -> None:
+        from core.config import ThemeManager, Theme
+        new_theme = ThemeManager.toggle_theme()
+        self._apply_theme()
+        theme_name = "Dark" if new_theme == Theme.DARK else "Light"
+        self.statusBar().showMessage(f"Switched to {theme_name} Theme", 2000)
+
+    def _apply_theme(self) -> None:
+        from core.config import ThemeManager, Theme
+        colors = self._get_theme_colors()
+        
+        # 배경색 변경
+        self.view.setBackgroundBrush(QColor(colors['background']))
+        
+        # 툴바 스타일 업데이트
+        for toolbar in self.findChildren(QToolBar):
+            self._apply_toolbar_styles(toolbar)
+        
+        # 메인 윈도우 스타일시트
+        self.setStyleSheet(f"""
+            QMainWindow {{ background: {colors['background']}; }}
+            QDockWidget {{ 
+                background: {colors['surface']}; 
+                color: {colors['text']};
+                titlebar-close-icon: url(none);
+            }}
+            QDockWidget::title {{
+                background: {colors['surface']};
+                padding: 8px;
+            }}
+            QMenuBar {{ 
+                background: {colors['surface']}; 
+                color: {colors['text']};
+            }}
+            QMenuBar::item:selected {{ background: {colors['border']}; }}
+            QMenu {{ 
+                background: {colors['surface']}; 
+                color: {colors['text']};
+            }}
+            QMenu::item:selected {{ background: {colors['border']}; }}
+            QStatusBar {{ 
+                background: {colors['surface']}; 
+                color: {colors['text']};
+            }}
+        """)
+
+    def _show_onboarding(self) -> None:
+        """Show onboarding overlay for first-time users"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Welcome to DDD Architecture Viewer")
+        dialog.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(16)
+        
+        # Welcome header
+        header = QLabel("🏗️ Welcome to DDD Architecture Viewer!")
+        header.setStyleSheet("font-size: 20px; font-weight: bold; padding: 16px;")
+        layout.addWidget(header)
+        
+        # Tips
+        tips = [
+            "📂 <b>Open a Project</b>: Click 'Open Project...' to select your Java/Spring project",
+            "🔍 <b>Analyze</b>: Click 'Analyze' to scan and visualize your architecture",
+            "🖱️ <b>Navigate</b>: Scroll to zoom, right-click drag to pan, drag nodes to rearrange",
+            "🎯 <b>Focus</b>: Click on components to see details in the Inspector panel",
+            "🌙 <b>Dark Mode</b>: View → Toggle Dark Theme for dark mode",
+        ]
+        
+        for tip in tips:
+            tip_label = QLabel(tip)
+            tip_label.setWordWrap(True)
+            tip_label.setStyleSheet("font-size: 14px; padding: 8px 16px;")
+            layout.addWidget(tip_label)
+        
+        layout.addStretch()
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        close_btn = QPushButton("Get Started!")
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background: #4A74E0;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background: #3A64D0;
+            }
+        """)
+        close_btn.clicked.connect(dialog.accept)
+        btn_layout.addWidget(close_btn)
+        
+        layout.addLayout(btn_layout)
+        
+        dialog.exec()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # 첫 실행 시 온보딩 표시 (프로젝트 로드 안됐을 때)
+        if not hasattr(self, '_onboarding_shown'):
+            self._onboarding_shown = True
+            if not self._current_graph:
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(500, self._show_onboarding)
+

@@ -24,6 +24,7 @@ class EdgeItem(QGraphicsItem):
         self._bounding = QRectF()
         self._start = QPointF()
         self._end = QPointF()
+        self._dirty = True  # dirty flag for batch updates
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
         self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
@@ -37,7 +38,8 @@ class EdgeItem(QGraphicsItem):
         return self._bounding
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # type: ignore[override]
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        self._dirty = False  # Reset dirty flag on paint
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         if self._violation_level:
             pen = self._violation_pen()
         else:
@@ -73,23 +75,29 @@ class EdgeItem(QGraphicsItem):
 
     def set_highlighted(self, highlighted: bool) -> None:
         self._hover_highlight = highlighted
-        self.update()
+        self._mark_dirty()
 
     def set_flow_state(self, in_flow: bool) -> None:
         self._flow_highlight = in_flow
-        self.update()
+        self._mark_dirty()
 
     def set_flow_visited(self, visited: bool) -> None:
         self._flow_visited = visited
-        self.update()
+        self._mark_dirty()
 
     def set_flow_active(self, active: bool) -> None:
         self._flow_active = active
-        self.update()
+        self._mark_dirty()
 
     def set_violation(self, level: str | None) -> None:
         self._violation_level = level
-        self.update()
+        self._mark_dirty()
+
+    def _mark_dirty(self) -> None:
+        """Mark edge as needing repaint - batches multiple state changes."""
+        if not self._dirty:
+            self._dirty = True
+            self.update()
 
     def _default_pen(self) -> QPen:
         color = EDGE_COLOR

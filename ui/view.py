@@ -22,8 +22,10 @@ class ArchitectureView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
-        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.BoundingRectViewportUpdate)
+        self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
+        # 성능 최적화: MinimalViewportUpdate로 더 공격적인 컬링
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate)
+        self.setCacheMode(QGraphicsView.CacheModeFlag.CacheBackground)
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontSavePainterState, True)
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing, True)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)

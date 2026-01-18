@@ -409,8 +409,12 @@ class ArchitectureScene(QGraphicsScene):
             edge.set_highlighted(True)
 
     def _reset_edge_highlights(self) -> None:
+        # 배치 업데이트: 개별 update() 호출 대신 일괄 상태 변경
         for edge in self.edge_items:
-            edge.set_highlighted(False)
+            edge._hover_highlight = False
+            edge._dirty = True
+        # Scene 전체의 단일 update로 처리
+        self.update()
 
     def apply_flow(self, flow: FlowResult, start_id: str) -> None:
         node_ids = {component.id for component in flow.nodes}
@@ -652,18 +656,9 @@ class ArchitectureScene(QGraphicsScene):
         return gradient
 
     def _apply_hex_shadow(self, item: QGraphicsPolygonItem) -> None:
-        effect = item.graphicsEffect()
-        if effect is not None:
-            return
-        from PySide6.QtWidgets import QGraphicsDropShadowEffect
-
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(4)
-        shadow.setOffset(0, 1)
-        shadow_color = QColor("#000000")
-        shadow_color.setAlphaF(0.12)
-        shadow.setColor(shadow_color)
-        item.setGraphicsEffect(shadow)
+        # 성능 최적화: 배경 헥사곤에는 무거운 QGraphicsDropShadowEffect 대신
+        # 시각적으로 충분한 그라데이션 배경만 사용
+        pass
 
     def _min_angle(self, radius: float) -> float:
         estimated_width = 80.0
