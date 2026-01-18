@@ -32,7 +32,6 @@ class FlowAnimationController(QObject):
         self._scene.addItem(self._token)
         self._speed = 1.0
         self._build_group()
-        self._group.finished.connect(self.stop)
 
     def play(self) -> None:
         if not self._steps or self._group.animationCount() == 0:
@@ -98,12 +97,7 @@ class FlowAnimationController(QObject):
             self._group.stop()
 
     def _build_group(self) -> None:
-        if self._group_connected:
-            self._group.currentAnimationChanged.disconnect(self._on_step_changed)
-            self._group_connected = False
-        if self._group.state() != QSequentialAnimationGroup.State.Stopped:
-            self._group.stop()
-        self._group.clear()
+        self._reset_group()
         if not self._steps:
             return
         for index in range(len(self._steps)):
@@ -122,9 +116,21 @@ class FlowAnimationController(QObject):
         if self._group.animationCount() > 0:
             self._group.currentAnimationChanged.connect(self._on_step_changed)
             self._group_connected = True
+        self._group.finished.connect(self.stop)
+
+    def _reset_group(self) -> None:
+        if self._group_connected:
+            self._group.currentAnimationChanged.disconnect(self._on_step_changed)
+            self._group_connected = False
+        if self._group.state() != QSequentialAnimationGroup.State.Stopped:
+            self._group.stop()
+        self._group.deleteLater()
+        self._group = QSequentialAnimationGroup(self)
 
     def _on_step_changed(self, animation) -> None:
         if animation is None:
+            return
+        if self._group.animationCount() == 0:
             return
         index = self._group.indexOfAnimation(animation)
         if index < 0 or index >= len(self._steps):

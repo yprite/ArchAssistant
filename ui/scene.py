@@ -545,21 +545,29 @@ class ArchitectureScene(QGraphicsScene):
 
     def _animate_item_opacity(self, item, target_opacity: float, duration: int = 200) -> None:
         """단일 아이템에 opacity 애니메이션 적용"""
-        from PySide6.QtCore import QPropertyAnimation
+        from PySide6.QtCore import QPropertyAnimation, QAbstractAnimation
         
         current = item.opacity()
         if abs(current - target_opacity) < 0.01:
-            return  # 이미 목표값에 도달
+            item.setOpacity(target_opacity)  # 직접 설정
+            return
         
         anim = QPropertyAnimation(item, b"opacity")
         anim.setDuration(duration)
         anim.setStartValue(current)
         anim.setEndValue(target_opacity)
+        # 애니메이션 완료 후 자동 삭제
+        anim.finished.connect(lambda: self._remove_finished_animation(anim))
         anim.start()
         
         if not hasattr(self, '_opacity_animations'):
             self._opacity_animations = []
         self._opacity_animations.append(anim)
+
+    def _remove_finished_animation(self, anim) -> None:
+        """완료된 애니메이션 리스트에서 제거"""
+        if hasattr(self, '_opacity_animations') and anim in self._opacity_animations:
+            self._opacity_animations.remove(anim)
 
     def _place_on_side_arcs(
         self, components: List[Component], radius: float, sides: List[int]
